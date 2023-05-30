@@ -45,8 +45,6 @@ namespace MonoBlackjack
         {
             _texture = texture;
             _font = font;
-            PenColor = Color.Black;
-            Size = new Vector2(200, 40);
         }
 
         public override void Draw(GameTime gameTime, SpriteBatch spriteBatch)
@@ -98,12 +96,6 @@ namespace MonoBlackjack
                     Click?.Invoke(this, new EventArgs());
                 }
             }
-        }
-
-        public void Repos(int x, int y)
-        {
-            Position = new Vector2(x,y);
-            DestRect = new Rectangle(x, y, (int)Size.X, (int)Size.Y);
         }
         #endregion
     }

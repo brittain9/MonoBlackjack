@@ -8,6 +8,18 @@ using System.Collections.Generic;
 
 namespace MonoBlackjack
 {
+    /*
+     Helpful diagram of viewport
+ (0, 0)-----------------------(width, 0)
+  |                             |
+  |                             |
+  |                             |
+  |                             |
+  |                             |
+  |                             |
+  |                             |
+(0, height)--------------(width, height)
+    */
     public class BlackjackGame : Microsoft.Xna.Framework.Game
     {
         private GraphicsDeviceManager _graphics;
@@ -81,7 +93,6 @@ namespace MonoBlackjack
         {
            var game = new MonoBlackjack.BlackjackGame();
            game.Run();
-
         }
     }
 }
