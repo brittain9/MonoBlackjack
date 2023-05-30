@@ -1,10 +1,11 @@
-﻿using Microsoft.Xna.Framework;
+﻿using System;
+using System.Collections.Generic;
+using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
+
 using MonoBlackjack;
-using MonoBlackjack.States;
-using System;
-using System.Collections.Generic;
+
 
 namespace MonoBlackjack
 {
@@ -44,8 +45,8 @@ namespace MonoBlackjack
         {
             Window.AllowUserResizing = true;
             Window.ClientSizeChanged += WindowClientSizeChangedHandler;
-            _graphics.PreferredBackBufferWidth = 1920;
-            _graphics.PreferredBackBufferHeight = 1080;
+            _graphics.PreferredBackBufferWidth = 1280;
+            _graphics.PreferredBackBufferHeight = 720;
 
             _graphics.ApplyChanges();
 

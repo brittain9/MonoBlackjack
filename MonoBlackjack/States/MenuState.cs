@@ -1,17 +1,19 @@
-﻿using Microsoft.Xna.Framework;
+﻿using System;
+using System.Collections.Generic;
+using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Content;
 using Microsoft.Xna.Framework.Graphics;
-using MonoBlackjack.States;
-using System;
-using System.Collections.Generic;
+
+using MonoBlackjack;
+
 
 namespace MonoBlackjack
 {
     internal class MenuState : State
     {
         private List<Component> _components;
+
         Texture2D logoTexture;
-        // TODO: Should I draw the buttons relative the logo rect
         Rectangle logoRect;
 
         public int CompSpacing;
@@ -23,51 +25,55 @@ namespace MonoBlackjack
 
         public void IntializeMainMenu(GraphicsDevice graphicsDevice, ContentManager content)
         {
-            // TODO: Fix magic numbers for drawing?
-            CompSpacing = graphicsDevice.Viewport.Height / 12;
+            CompSpacing = graphicsDevice.Viewport.Height / 15;
 
             logoTexture = content.Load<Texture2D>("Art/menuLogo");
             logoRect = new Rectangle(
-                graphicsDevice.Viewport.Width / 2, 
-                300, // space down from screen
+                graphicsDevice.Viewport.Width / 2, // middle screen width
+                graphicsDevice.Viewport.Height / 3, // space down from screen
                 graphicsDevice.Viewport.Width / 2, // size of logo scaled to screen size
                 graphicsDevice.Viewport.Height / 2); 
 
             var buttonTexture = _content.Load<Texture2D>("Controls/Button");
             var buttonFont = _content.Load<SpriteFont>("Fonts/MyFont");
+            Vector2 buttonSize = new Vector2(graphicsDevice.Viewport.Width / 4, graphicsDevice.Viewport.Height / 20);
 
-            Vector2 buttonSize = new Vector2(graphicsDevice.Viewport.Width / 10, graphicsDevice.Viewport.Height / 15);
-
-            var newGameButton = new Button(buttonTexture, buttonFont)
+            // This button will be after the below the logo
+            var playButton = new Button(buttonTexture, buttonFont)
             {
-                Position = new Vector2(graphicsDevice.Viewport.Width / 2, graphicsDevice.Viewport.Height / 2),
-                Text = "Play Blackjack",
+                Position = new Vector2(logoRect.X, logoRect.Y + CompSpacing * 3),
+                Text = "Play",
                 Size = buttonSize,
                 PenColor = Color.Black
             };
+            playButton.Click += (s, e) => 
+            { 
+                _game.ChangeState(new GameState(_game, _graphicsDevice, content)); 
+            };
 
-            newGameButton.Click += (s, e) => { _game.ChangeState(new GameState(_game, _graphicsDevice, content)); };
-
+            // This button is below the n
             var quitGameButton = new Button(buttonTexture, buttonFont)
             {
-                Position = new Vector2(newGameButton.Position.X, newGameButton.Position.Y + CompSpacing),
-                Text = "Quit Game",
+                Position = new Vector2(playButton.Position.X, playButton.Position.Y + CompSpacing),
+                Text = "Quit",
                 Size = buttonSize,
                 PenColor = Color.Black
-        };
-
-            quitGameButton.Click += (s, e) => { _game.Exit(); };
+            };
+            quitGameButton.Click += (s, e) => 
+            { 
+                _game.Exit(); 
+            };
 
             _components = new List<Component>()
             {
-                newGameButton, quitGameButton,
+                playButton, quitGameButton,
             };
         }
 
         public override void Draw(GameTime gameTime, SpriteBatch spriteBatch)
         {
             spriteBatch.Begin();
-            // Draw texture
+            // Draw logo
             spriteBatch.Draw(
                 logoTexture,
                 logoRect,
@@ -89,7 +95,6 @@ namespace MonoBlackjack
         public override void PostUpdate(GameTime gameTime)
         {
             // remove sprites if they are not needed
-            Console.WriteLine("Post update");
         }
 
         public override void Update(GameTime gameTime)

@@ -1,9 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
@@ -32,12 +27,9 @@ namespace MonoBlackjack
             {
                 return new Rectangle((int)Position.X, (int)Position.Y, (int)Size.X, (int)Size.Y);
             }
-            set {}
         }
         public string Text { get; set; }
-
         public Texture2D Texture { get { return _texture; } }
-
         #endregion
 
         #region Methods
@@ -49,9 +41,9 @@ namespace MonoBlackjack
 
         public override void Draw(GameTime gameTime, SpriteBatch spriteBatch)
         {
-            var color = Color.White;
+            var color = Color.LightGray;
             if (_isHovering)
-                color = Color.Gray;
+                color = Color.DarkSlateGray;
 
             spriteBatch.Draw(
                 _texture,
