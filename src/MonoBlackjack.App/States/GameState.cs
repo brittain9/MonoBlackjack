@@ -1,8 +1,8 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Content;
 using Microsoft.Xna.Framework.Graphics;
-using MonoBlackjack.Game;
-using MonoBlackjack.Game.Players;
+using MonoBlackjack.Core;
+using MonoBlackjack.Core.Players;
 using MonoBlackjack.Rendering;
 
 namespace MonoBlackjack;
@@ -22,7 +22,7 @@ internal class GameState : State
         _cardRenderer = new CardRenderer();
         _cardRenderer.LoadTextures(content);
 
-        _shoe = new Shoe(Globals.NumberOfDecks);
+        _shoe = new Shoe(GameConfig.NumberOfDecks);
 
         _player = new Human();
         _dealer = new Dealer();

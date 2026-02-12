@@ -1,4 +1,4 @@
-namespace MonoBlackjack.Game;
+namespace MonoBlackjack.Core;
 
 /// <summary>
 /// A single blackjack hand. Domain aggregate that owns its cards and evaluation logic.
@@ -9,8 +9,8 @@ public class Hand
 
     public IReadOnlyList<Card> Cards => _cards;
     public int Value => Evaluate(_cards);
-    public bool IsBusted => Value > Globals.BustNumber;
-    public bool IsBlackjack => _cards.Count == 2 && Value == Globals.BustNumber;
+    public bool IsBusted => Value > GameConfig.BustNumber;
+    public bool IsBlackjack => _cards.Count == 2 && Value == GameConfig.BustNumber;
 
     public bool IsSoft
     {
@@ -24,7 +24,7 @@ public class Hand
                 if (card.Rank == Rank.Ace)
                     hasAce = true;
             }
-            return hasAce && hard + Globals.AceExtraValue <= Globals.BustNumber;
+            return hasAce && hard + GameConfig.AceExtraValue <= GameConfig.BustNumber;
         }
     }
 
@@ -56,8 +56,8 @@ public class Hand
                 hasAce = true;
         }
 
-        if (hasAce && value + Globals.AceExtraValue <= Globals.BustNumber)
-            value += Globals.AceExtraValue;
+        if (hasAce && value + GameConfig.AceExtraValue <= GameConfig.BustNumber)
+            value += GameConfig.AceExtraValue;
 
         return value;
     }

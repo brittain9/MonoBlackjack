@@ -1,15 +1,23 @@
-namespace MonoBlackjack.Game;
+namespace MonoBlackjack.Core;
 
 /// <summary>
 /// Global game configuration. All rules are configurable for simulation/testing.
 /// </summary>
-public static class Globals
+public static class GameConfig
 {
-    // ========== Core Rules ==========
+    /// <summary>
+    /// Bust threshold. Standard blackjack = 21.
+    /// </summary>
     public static int BustNumber = 21;
+
+    /// <summary>
+    /// Soft ace bonus value. Ace counts as 1 + this value when it doesn't bust.
+    /// </summary>
     public static int AceExtraValue = 10;
 
-    // ========== Shoe Configuration ==========
+    /// <summary>
+    /// Number of decks in the shoe. Casino standard = 6.
+    /// </summary>
     public static int NumberOfDecks = 6;
 
     /// <summary>
@@ -18,17 +26,17 @@ public static class Globals
     /// </summary>
     public static bool UseCryptographicShuffle = false;
 
-    // ========== Player Configuration ==========
+    /// <summary>
+    /// Starting bankroll for human players.
+    /// </summary>
     public static int StartingBank = 1000;
 
-    // ========== Dealer Rules ==========
     /// <summary>
     /// True = dealer hits on soft 17 (H17, worse for player).
     /// False = dealer stands on soft 17 (S17, standard).
     /// </summary>
     public static bool DealerHitsSoft17 = false;
 
-    // ========== Payout Rules ==========
     /// <summary>
     /// Blackjack payout multiplier. Standard = 1.5 (3:2). Bad = 1.2 (6:5).
     /// </summary>
@@ -39,7 +47,6 @@ public static class Globals
     /// </summary>
     public static decimal InsurancePayout = 2.0m;
 
-    // ========== Player Action Rules ==========
     /// <summary>
     /// Allow doubling down after splitting a pair.
     /// </summary>
@@ -65,7 +72,13 @@ public static class Globals
     /// </summary>
     public static bool AllowEarlySurrender = false;
 
-    // ========== Betting Rules ==========
+    /// <summary>
+    /// Minimum bet amount.
+    /// </summary>
     public static decimal MinimumBet = 5m;
+
+    /// <summary>
+    /// Maximum bet amount.
+    /// </summary>
     public static decimal MaximumBet = 500m;
 }

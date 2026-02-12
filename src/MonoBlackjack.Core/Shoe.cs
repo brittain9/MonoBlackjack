@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 
-namespace MonoBlackjack.Game;
+namespace MonoBlackjack.Core;
 
 /// <summary>
 /// Multi-deck shoe. Owns the card collection, handles shuffle and draw.
@@ -20,7 +20,7 @@ public class Shoe
     public Shoe(int deckCount, Random? rng = null)
     {
         _deckCount = deckCount;
-        _useCryptoShuffle = Globals.UseCryptographicShuffle;
+        _useCryptoShuffle = GameConfig.UseCryptographicShuffle;
 
         // Only use provided RNG if crypto shuffle is disabled
         _rng = _useCryptoShuffle ? null : (rng ?? Random.Shared);

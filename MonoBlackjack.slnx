@@ -1,3 +1,11 @@
 <Solution>
-  <Project Path="MonoBlackjack/MonoBlackjack.csproj" />
+  <Folder Name="/src/">
+    <Project Path="src/MonoBlackjack.App/MonoBlackjack.App.csproj" />
+    <Project Path="src/MonoBlackjack.Core/MonoBlackjack.Core.csproj" />
+    <Project Path="src/MonoBlackjack.Data/MonoBlackjack.Data.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MonoBlackjack.Core.Tests/MonoBlackjack.Core.Tests.csproj" />
+    <Project Path="tests/MonoBlackjack.Data.Tests/MonoBlackjack.Data.Tests.csproj" />
+  </Folder>
 </Solution>

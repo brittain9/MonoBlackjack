@@ -25,4 +25,8 @@
     <PackageReference Include="MonoGame.Framework.DesktopGL" Version="3.8.4.1" />
     <PackageReference Include="MonoGame.Content.Builder.Task" Version="3.8.4.1" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\MonoBlackjack.Core\MonoBlackjack.Core.csproj" />
+    <ProjectReference Include="..\MonoBlackjack.Data\MonoBlackjack.Data.csproj" />
+  </ItemGroup>
 </Project>

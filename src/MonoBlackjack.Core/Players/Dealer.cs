@@ -1,6 +1,6 @@
-using MonoBlackjack.Game;
+using MonoBlackjack.Core;
 
-namespace MonoBlackjack.Game.Players;
+namespace MonoBlackjack.Core.Players;
 
 /// <summary>
 /// The dealer. Never splits, never makes decisions.
@@ -38,7 +38,7 @@ public class Dealer
         // - Hard 17 or more
         // - Soft 18 or more
         // - Soft 17 if DealerHitsSoft17 is false (stand on soft 17)
-        while (Hand.Value < 17 || (Globals.DealerHitsSoft17 && Hand.IsSoft && Hand.Value == 17))
+        while (Hand.Value < 17 || (GameConfig.DealerHitsSoft17 && Hand.IsSoft && Hand.Value == 17))
         {
             Hit(shoe);
 

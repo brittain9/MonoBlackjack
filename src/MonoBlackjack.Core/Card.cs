@@ -1,4 +1,4 @@
-namespace MonoBlackjack.Game;
+namespace MonoBlackjack.Core;
 
 public enum Suit : byte
 {

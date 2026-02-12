@@ -1,4 +1,4 @@
-namespace MonoBlackjack.Game.Players;
+namespace MonoBlackjack.Core.Players;
 
 public class Human : PlayerBase
 {
@@ -7,6 +7,6 @@ public class Human : PlayerBase
     public Human(string name = "Player", int? startingBank = null)
         : base(name)
     {
-        Bank = startingBank ?? Globals.StartingBank;
+        Bank = startingBank ?? GameConfig.StartingBank;
     }
 }

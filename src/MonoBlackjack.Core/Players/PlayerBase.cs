@@ -1,6 +1,6 @@
-using MonoBlackjack.Game;
+using MonoBlackjack.Core;
 
-namespace MonoBlackjack.Game.Players;
+namespace MonoBlackjack.Core.Players;
 
 /// <summary>
 /// Shared logic for all player types. No MonoGame dependencies, no rendering.
