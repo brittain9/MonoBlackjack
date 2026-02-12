@@ -1,53 +1,50 @@
-﻿using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
-using MonoBlackjack;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using MonoBlackjack.Game;
 
-namespace MonoBlackjack
+namespace MonoBlackjack.Game.Players;
+
+/// <summary>
+/// The dealer. Never splits, never makes decisions.
+/// Follows fixed house rules (hit on 16, stand on 17/soft 17).
+/// </summary>
+public class Dealer
 {
-    public class Dealer : IPlayer
+    public string Name => "Dealer";
+    public Hand Hand { get; private set; } = new();
+
+    public void DealInitialHand(Shoe shoe)
     {
-        public List<Card> Hand;
+        Hand = new Hand();
+        Hand.AddCard(shoe.Draw());
+        Hand.AddCard(shoe.Draw());
+    }
 
-        public Dealer(ref List<Card> deck) : base(ref deck)
-        {
-            Hand = CreateHand(ref deck);
-        }
+    public void Hit(Shoe shoe)
+    {
+        Hand.AddCard(shoe.Draw());
+    }
 
-        public List<Card> CreateHand(ref List<Card> deck)
-        {
-            var hand = new List<Card>()
-            {
-                Card.DrawCard(ref deck),
-                Card.DrawCard(ref deck)
-            };
-            return hand;
-        }
+    public void ClearHand()
+    {
+        Hand = new Hand();
+    }
 
-        public void SetHandPosition(Vector2 pos, int CardSpacing)
+    /// <summary>
+    /// Execute dealer AI according to house rules.
+    /// Hits on 16 or less, stands on 17+, configurable soft 17 behavior.
+    /// </summary>
+    public void PlayHand(Shoe shoe)
+    {
+        // Dealer keeps hitting until:
+        // - Hard 17 or more
+        // - Soft 18 or more
+        // - Soft 17 if DealerHitsSoft17 is false (stand on soft 17)
+        while (Hand.Value < 17 || (Globals.DealerHitsSoft17 && Hand.IsSoft && Hand.Value == 17))
         {
-            for(int i = 0; i < Hand.Count; i++)
-            {
-                Hand[i].Position.X = pos.X + CardSpacing * i;
-                Hand[i].Position.Y = pos.Y;
-                Hand[i].DestRect = new Rectangle((int)Hand[i].Position.X, (int)Hand[i].Position.Y, (int)Hand[i].Size.X, (int)Hand[i].Size.Y);
-            }
-        }
+            Hit(shoe);
 
-        public override void Draw(GameTime gameTime, SpriteBatch spriteBatch)
-        {
-            foreach (var card in Hand)
-            {
-                card.Draw(gameTime, spriteBatch);
-            }
-        }
-
-        public override void Update(GameTime gameTime)
-        {
+            // Safety: if dealer busts, stop (shouldn't loop, but defensive)
+            if (Hand.IsBusted)
+                break;
         }
     }
 }

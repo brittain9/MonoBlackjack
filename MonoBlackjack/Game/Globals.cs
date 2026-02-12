@@ -1,15 +1,71 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+namespace MonoBlackjack.Game;
 
-namespace MonoBlackjack
+/// <summary>
+/// Global game configuration. All rules are configurable for simulation/testing.
+/// </summary>
+public static class Globals
 {
-    public class Globals
-    {
-        public static int BustNumber = 21;
-        public static int AceExtraValue = 10;
-        public static int NumberOfDecks = 6;
-    }
+    // ========== Core Rules ==========
+    public static int BustNumber = 21;
+    public static int AceExtraValue = 10;
+
+    // ========== Shoe Configuration ==========
+    public static int NumberOfDecks = 6;
+
+    /// <summary>
+    /// Use cryptographic RNG for casino-grade shuffling (production).
+    /// False = deterministic Random for testing/reproducibility (development).
+    /// </summary>
+    public static bool UseCryptographicShuffle = false;
+
+    // ========== Player Configuration ==========
+    public static int StartingBank = 1000;
+
+    // ========== Dealer Rules ==========
+    /// <summary>
+    /// True = dealer hits on soft 17 (H17, worse for player).
+    /// False = dealer stands on soft 17 (S17, standard).
+    /// </summary>
+    public static bool DealerHitsSoft17 = false;
+
+    // ========== Payout Rules ==========
+    /// <summary>
+    /// Blackjack payout multiplier. Standard = 1.5 (3:2). Bad = 1.2 (6:5).
+    /// </summary>
+    public static decimal BlackjackPayout = 1.5m;
+
+    /// <summary>
+    /// Insurance payout. Standard = 2:1 (pays 2x the insurance bet).
+    /// </summary>
+    public static decimal InsurancePayout = 2.0m;
+
+    // ========== Player Action Rules ==========
+    /// <summary>
+    /// Allow doubling down after splitting a pair.
+    /// </summary>
+    public static bool DoubleAfterSplit = true;
+
+    /// <summary>
+    /// Allow re-splitting aces (rare, player-favorable).
+    /// </summary>
+    public static bool ResplitAces = false;
+
+    /// <summary>
+    /// Maximum number of times a hand can be split (typically 3).
+    /// </summary>
+    public static int MaxSplits = 3;
+
+    /// <summary>
+    /// Allow late surrender (forfeit hand for half the bet after dealer checks for blackjack).
+    /// </summary>
+    public static bool AllowLateSurrender = false;
+
+    /// <summary>
+    /// Allow early surrender (forfeit before dealer checks — very rare, very player-favorable).
+    /// </summary>
+    public static bool AllowEarlySurrender = false;
+
+    // ========== Betting Rules ==========
+    public static decimal MinimumBet = 5m;
+    public static decimal MaximumBet = 500m;
 }

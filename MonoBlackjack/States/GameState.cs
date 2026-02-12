@@ -1,76 +1,69 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Reflection.Metadata;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Content;
 using Microsoft.Xna.Framework.Graphics;
-using MonoBlackjack;
+using MonoBlackjack.Game;
+using MonoBlackjack.Game.Players;
+using MonoBlackjack.Rendering;
 
-namespace MonoBlackjack
+namespace MonoBlackjack;
+
+internal class GameState : State
 {
-    internal class GameState : State
+    private readonly Shoe _shoe;
+    private readonly CardRenderer _cardRenderer;
+    private readonly Human _player;
+    private readonly Dealer _dealer;
+
+    private float _cardSpacing;
+
+    public GameState(BlackjackGame game, GraphicsDevice graphicsDevice, ContentManager content)
+        : base(game, graphicsDevice, content)
     {
-        private int CardSpacing;
+        _cardRenderer = new CardRenderer();
+        _cardRenderer.LoadTextures(content);
 
-        public List<Card> CardDeck;
-        public List<IPlayer> Players;
+        _shoe = new Shoe(Globals.NumberOfDecks);
 
-        public GameState(BlackjackGame game, GraphicsDevice graphicsDevice, ContentManager content) : base(game, graphicsDevice, content)
-        {
-            Card.LoadTextures(content);
-            CardDeck = Card.CreateDeck();
-            Card.ShuffleDeck(ref CardDeck);
+        _player = new Human();
+        _dealer = new Dealer();
 
-            InitializePlayers();
-        }
+        _player.DealInitialHand(_shoe);
+        _dealer.DealInitialHand(_shoe);
 
-        public void InitializePlayers()
-        {
-            Player player = new Player(ref CardDeck);
-            Dealer dealer = new Dealer(ref CardDeck);
-
-            CardSpacing = _graphicsDevice.Viewport.Width / 10;
-            dealer.SetHandPosition(new Vector2(
-                _graphicsDevice.Viewport.Width / 2 - (dealer.Hand[0].Size.X / 2),
-                _graphicsDevice.Viewport.Height / 6),
-                CardSpacing);
-
-            Player.SetHandPosition(player.Hands[0],
-                new Vector2(_graphicsDevice.Viewport.Width / 2 - (dealer.Hand[0].Size.X / 2),
-                _graphicsDevice.Viewport.Height - _graphicsDevice.Viewport.Height / 4),
-                CardSpacing);
-
-            Players = new List<IPlayer>()
-            {
-                player, dealer
-            };
-        }
-
-        public override void Draw(GameTime gameTime, SpriteBatch spriteBatch)
-        {
-            spriteBatch.Begin();
-
-            foreach (var p in Players)
-            {
-                p.Draw(gameTime, spriteBatch);
-            }
-
-            spriteBatch.End();
-        }
-
-        public override void HandleResize(Rectangle vp)
-        {
-            InitializePlayers();
-        }
-
-        public override void PostUpdate(GameTime gameTime)
-        {
-
-        }
-
-        public override void Update(GameTime gameTime)
-        {
-
-        }
+        _cardSpacing = graphicsDevice.Viewport.Width / 10f;
     }
+
+    public override void Draw(GameTime gameTime, SpriteBatch spriteBatch)
+    {
+        spriteBatch.Begin();
+
+        var vp = _graphicsDevice.Viewport;
+
+        // Dealer hand — top center
+        var dealerPos = new Vector2(
+            vp.Width / 2f - CardRenderer.CardSize.X / 2f,
+            vp.Height / 6f);
+        _cardRenderer.DrawHand(spriteBatch, _dealer.Hand.Cards, dealerPos, _cardSpacing);
+
+        // Player hand — bottom center
+        var playerPos = new Vector2(
+            vp.Width / 2f - CardRenderer.CardSize.X / 2f,
+            vp.Height - vp.Height / 4f);
+
+        foreach (var hand in _player.Hands)
+        {
+            _cardRenderer.DrawHand(spriteBatch, hand.Cards, playerPos, _cardSpacing);
+        }
+
+        spriteBatch.End();
+    }
+
+    public override void HandleResize(Rectangle vp)
+    {
+        _cardSpacing = vp.Width / 10f;
+    }
+
+    public override void PostUpdate(GameTime gameTime) { }
+
+    public override void Update(GameTime gameTime) { }
 }
