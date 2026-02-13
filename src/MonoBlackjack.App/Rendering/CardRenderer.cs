@@ -50,4 +50,20 @@ public class CardRenderer
             DrawCard(spriteBatch, cards[i], pos);
         }
     }
+
+    /// <summary>
+    /// Factory method: creates a CardSprite with the correct face texture assigned.
+    /// </summary>
+    public CardSprite CreateCardSprite(Card card, bool faceDown = false)
+    {
+        var sprite = new CardSprite(card)
+        {
+            FaceDown = faceDown
+        };
+
+        if (_textureCache.TryGetValue(card.AssetName, out var texture))
+            sprite.Texture = texture;
+
+        return sprite;
+    }
 }

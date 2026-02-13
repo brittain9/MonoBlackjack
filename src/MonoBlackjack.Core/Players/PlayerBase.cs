@@ -26,6 +26,13 @@ public abstract class PlayerBase
         _hands.Add(hand);
     }
 
+    public int CreateHand()
+    {
+        var hand = new Hand();
+        _hands.Add(hand);
+        return _hands.Count - 1;
+    }
+
     public void AddCardToHand(int handIndex, Card card)
     {
         _hands[handIndex].AddCard(card);
