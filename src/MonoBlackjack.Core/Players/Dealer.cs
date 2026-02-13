@@ -34,13 +34,23 @@ public class Dealer
     /// </summary>
     public void PlayHand(Shoe shoe)
     {
+        PlayHand(shoe, _ => { });
+    }
+
+    /// <summary>
+    /// Execute dealer AI according to house rules and invoke callback for each hit card.
+    /// </summary>
+    public void PlayHand(Shoe shoe, Action<Card> onHit)
+    {
         // Dealer keeps hitting until:
         // - Hard 17 or more
         // - Soft 18 or more
         // - Soft 17 if DealerHitsSoft17 is false (stand on soft 17)
         while (Hand.Value < 17 || (GameConfig.DealerHitsSoft17 && Hand.IsSoft && Hand.Value == 17))
         {
-            Hit(shoe);
+            var card = shoe.Draw();
+            Hand.AddCard(card);
+            onHit(card);
 
             // Safety: if dealer busts, stop (shouldn't loop, but defensive)
             if (Hand.IsBusted)

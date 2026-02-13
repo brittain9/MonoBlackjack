@@ -12,6 +12,7 @@ namespace MonoBlackjack.Rendering;
 public class CardRenderer
 {
     private readonly Dictionary<string, Texture2D> _textureCache = new();
+    private Texture2D? _defaultBackTexture;
 
     // Card size in pixels. Preserves 500:726 source texture aspect ratio.
     public static readonly Vector2 CardSize = new(100, 145);
@@ -26,6 +27,16 @@ public class CardRenderer
                 _textureCache[card.AssetName] =
                     content.Load<Texture2D>($"Cards/{card.AssetName}");
             }
+        }
+
+        try
+        {
+            _defaultBackTexture = content.Load<Texture2D>("Cards/Backs/card_back_blue");
+        }
+        catch (ContentLoadException)
+        {
+            // Keep gameplay running even if optional back texture is missing.
+            _defaultBackTexture = null;
         }
     }
 
@@ -58,7 +69,8 @@ public class CardRenderer
     {
         var sprite = new CardSprite(card)
         {
-            FaceDown = faceDown
+            FaceDown = faceDown,
+            BackTexture = _defaultBackTexture
         };
 
         if (_textureCache.TryGetValue(card.AssetName, out var texture))

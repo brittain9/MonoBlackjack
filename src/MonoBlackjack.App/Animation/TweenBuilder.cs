@@ -11,27 +11,39 @@ public static class TweenBuilder
     public static Tween MoveTo(Sprite sprite, Vector2 target, float duration,
         float delay = 0f, Func<float, float>? ease = null)
     {
-        var start = sprite.Position;
+        Vector2? start = null;
         ease ??= Easing.EaseOutQuad;
         return new Tween(duration, delay, ease,
-            t => sprite.Position = Vector2.Lerp(start, target, t));
+            t =>
+            {
+                start ??= sprite.Position;
+                sprite.Position = Vector2.Lerp(start.Value, target, t);
+            });
     }
 
     public static Tween FadeTo(Sprite sprite, float targetOpacity, float duration,
         float delay = 0f, Func<float, float>? ease = null)
     {
-        var start = sprite.Opacity;
+        float? start = null;
         ease ??= Easing.Linear;
         return new Tween(duration, delay, ease,
-            t => sprite.Opacity = start + (targetOpacity - start) * t);
+            t =>
+            {
+                start ??= sprite.Opacity;
+                sprite.Opacity = start.Value + (targetOpacity - start.Value) * t;
+            });
     }
 
     public static Tween ScaleTo(Sprite sprite, float targetScale, float duration,
         float delay = 0f, Func<float, float>? ease = null)
     {
-        var start = sprite.Scale;
+        float? start = null;
         ease ??= Easing.EaseOutQuad;
         return new Tween(duration, delay, ease,
-            t => sprite.Scale = start + (targetScale - start) * t);
+            t =>
+            {
+                start ??= sprite.Scale;
+                sprite.Scale = start.Value + (targetScale - start.Value) * t;
+            });
     }
 }

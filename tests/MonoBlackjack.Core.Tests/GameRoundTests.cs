@@ -155,6 +155,17 @@ public class GameRoundTests
     }
 
     [Fact]
+    public void PlayerDoubleDown_WithMoreThanTwoCards_Throws()
+    {
+        var (round, _) = CreatePlayableRound(seedStart: 0);
+
+        round.PlayerHit();
+
+        var act = () => round.PlayerDoubleDown();
+        act.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
     public void PlayerSurrender_HalvesBetAndCompletes()
     {
         var shoe = new Shoe(1, new Random(42));
@@ -176,6 +187,27 @@ public class GameRoundTests
         resolved.Outcome.Should().Be(HandOutcome.Surrender);
         resolved.Payout.Should().Be(-50);
         round.Phase.Should().Be(RoundPhase.Complete);
+    }
+
+    [Fact]
+    public void PlayerSurrender_WithOddMinimumBet_KeepsFractionalBankroll()
+    {
+        var originalMinimum = GameConfig.MinimumBet;
+        try
+        {
+            GameConfig.MinimumBet = 5m;
+            var (round, player) = CreatePlayableRound(startingBank: 1000, seedStart: 100);
+            var bankBefore = player.Bank;
+
+            round.PlayerSurrender();
+
+            player.Bank.Should().Be(bankBefore - 2.5m);
+            _events.OfType<HandResolved>().Last().Payout.Should().Be(-2.5m);
+        }
+        finally
+        {
+            GameConfig.MinimumBet = originalMinimum;
+        }
     }
 
     [Fact]
@@ -287,5 +319,24 @@ public class GameRoundTests
         }
 
         // Push is less common but should occur within 200 seeds
+    }
+
+    private (GameRound Round, Human Player) CreatePlayableRound(int startingBank = 1000, int seedStart = 0, int maxSeeds = 300)
+    {
+        for (int seed = seedStart; seed < seedStart + maxSeeds; seed++)
+        {
+            _events.Clear();
+            var shoe = new Shoe(1, new Random(seed));
+            var player = new Human(startingBank: startingBank);
+            var dealer = new Dealer();
+            var round = new GameRound(shoe, player, dealer, e => _events.Add(e));
+            round.PlaceBet(GameConfig.MinimumBet);
+            round.Deal();
+
+            if (round.Phase == RoundPhase.PlayerTurn)
+                return (round, player);
+        }
+
+        throw new InvalidOperationException("Could not find a playable round without an initial blackjack.");
     }
 }

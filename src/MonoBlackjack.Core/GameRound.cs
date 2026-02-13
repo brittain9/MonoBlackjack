@@ -78,7 +78,10 @@ public class GameRound
         {
             _publish(new BlackjackDetected(_player.Name));
             if (_dealer.Hand.IsBlackjack)
+            {
                 _publish(new BlackjackDetected(_dealer.Name));
+                _publish(new DealerHoleCardRevealed(_dealer.Hand.Cards[1]));
+            }
             Phase = RoundPhase.Resolution;
             Resolve();
             return;
@@ -87,6 +90,7 @@ public class GameRound
         if (_dealer.Hand.IsBlackjack)
         {
             _publish(new BlackjackDetected(_dealer.Name));
+            _publish(new DealerHoleCardRevealed(_dealer.Hand.Cards[1]));
             Phase = RoundPhase.Resolution;
             Resolve();
             return;
@@ -127,6 +131,8 @@ public class GameRound
     {
         if (Phase != RoundPhase.PlayerTurn)
             throw new InvalidOperationException($"Cannot double down in phase {Phase}");
+        if (!CanDoubleDown())
+            throw new InvalidOperationException("Cannot double down for this hand state or bankroll.");
 
         _currentBet *= 2;
         var card = _shoe.Draw();
@@ -154,7 +160,7 @@ public class GameRound
         Phase = RoundPhase.Resolution;
 
         var payout = -_currentBet / 2;
-        _player.Bank += (int)payout;
+        _player.Bank += payout;
         _publish(new HandResolved(_player.Name, 0, HandOutcome.Surrender, payout));
         _publish(new RoundComplete());
         Phase = RoundPhase.Complete;
@@ -171,22 +177,12 @@ public class GameRound
         var holeCard = _dealer.Hand.Cards[1];
         _publish(new DealerHoleCardRevealed(holeCard));
 
-        // Dealer hits per house rules
-        while (_dealer.Hand.Value < 17 ||
-               (GameConfig.DealerHitsSoft17 && _dealer.Hand.IsSoft && _dealer.Hand.Value == 17))
-        {
-            var card = _shoe.Draw();
-            _dealer.Hand.AddCard(card);
-            _publish(new DealerHit(card));
+        // Dealer hits per house rules (delegated to Dealer AI)
+        _dealer.PlayHand(_shoe, card => _publish(new DealerHit(card)));
 
-            if (_dealer.Hand.IsBusted)
-            {
-                _publish(new DealerBusted());
-                break;
-            }
-        }
-
-        if (!_dealer.Hand.IsBusted)
+        if (_dealer.Hand.IsBusted)
+            _publish(new DealerBusted());
+        else
             _publish(new DealerStood());
 
         Phase = RoundPhase.Resolution;
@@ -244,9 +240,21 @@ public class GameRound
             payout = 0;
         }
 
-        _player.Bank += (int)payout;
+        _player.Bank += payout;
         _publish(new HandResolved(_player.Name, 0, outcome, payout));
         _publish(new RoundComplete());
         Phase = RoundPhase.Complete;
+    }
+
+    private bool CanDoubleDown()
+    {
+        var hand = _player.Hands[0];
+        if (hand.Cards.Count != 2)
+            return false;
+
+        if (_currentBet * 2 > GameConfig.MaximumBet)
+            return false;
+
+        return _player.Bank >= _currentBet;
     }
 }

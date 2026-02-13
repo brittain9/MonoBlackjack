@@ -22,7 +22,11 @@ namespace MonoBlackjack
         {
             get
             {
-                return new Rectangle((int)Position.X, (int)Position.Y, (int)Size.X, (int)Size.Y);
+                return new Rectangle(
+                    (int)(Position.X - Size.X / 2f),
+                    (int)(Position.Y - Size.Y / 2f),
+                    (int)Size.X,
+                    (int)Size.Y);
             }
         }
         public string Text { get; set; } = "";
@@ -46,19 +50,24 @@ namespace MonoBlackjack
                 null,
                 color,
                 0f,
-                new Vector2(_texture.Width / 2, _texture.Height / 2),
+                Vector2.Zero,
                 SpriteEffects.None,
                 0f);
 
             if(!string.IsNullOrEmpty(Text))
             {
+                var textSize = _font.MeasureString(Text);
+                var textPosition = new Vector2(
+                    DestRect.Center.X - textSize.X / 2f,
+                    DestRect.Center.Y - textSize.Y / 2f);
+
                 spriteBatch.DrawString(
                     _font, 
                     Text, 
-                    new Vector2(DestRect.X, DestRect.Y), 
+                    textPosition, 
                     PenColor,
                     0f, 
-                    new Vector2((_font.MeasureString(Text).X / 2), (_font.MeasureString(Text).Y / 2)),
+                    Vector2.Zero,
                     1f, 
                     SpriteEffects.None,
                     0f);
@@ -70,8 +79,7 @@ namespace MonoBlackjack
             _previousMouse = _currentMouse;
             _currentMouse = Mouse.GetState();
 
-            // Since the button is centered on the size 
-            var mouseRectangle = new Rectangle(_currentMouse.X + DestRect.Width / 2, _currentMouse.Y + DestRect.Height / 2, 1, 1);
+            var mouseRectangle = new Rectangle(_currentMouse.X, _currentMouse.Y, 1, 1);
             _isHovering = false;
 
             if (mouseRectangle.Intersects(DestRect))
