@@ -853,6 +853,9 @@
 /processorParam:TextureFormat=Color
 /build:Controls/Button.png
 
+#begin Fonts/PressStart2P-Regular.ttf
+/copy:Fonts/PressStart2P-Regular.ttf
+
 #begin Fonts/MyFont.spritefont
 /importer:FontDescriptionImporter
 /processor:FontDescriptionProcessor
