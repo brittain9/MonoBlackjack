@@ -46,4 +46,44 @@ public static class TweenBuilder
                 sprite.Scale = start.Value + (targetScale - start.Value) * t;
             });
     }
+
+    public static Tween FlipX(Sprite sprite, float duration, float delay,
+        Action? onMidpoint = null)
+    {
+        Vector2? restPosition = null;
+        float? halfWidth = null;
+        bool midpointFired = false;
+
+        return new Tween(duration, delay, Easing.Linear,
+            t =>
+            {
+                restPosition ??= sprite.Position;
+                halfWidth ??= sprite.Size.X * sprite.Scale * 0.5f;
+
+                float scaleX;
+                if (t < 0.5f)
+                {
+                    // First half: 1 → 0 with ease-in
+                    float phase = t * 2f;
+                    scaleX = 1f - Easing.EaseInQuad(phase);
+                }
+                else
+                {
+                    if (!midpointFired)
+                    {
+                        midpointFired = true;
+                        onMidpoint?.Invoke();
+                    }
+
+                    // Second half: 0 → 1 with ease-out
+                    float phase = (t - 0.5f) * 2f;
+                    scaleX = Easing.EaseOutQuad(phase);
+                }
+
+                sprite.ScaleX = scaleX;
+                sprite.Position = new Vector2(
+                    restPosition.Value.X + halfWidth.Value * (1f - scaleX),
+                    restPosition.Value.Y);
+            });
+    }
 }

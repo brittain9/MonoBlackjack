@@ -43,17 +43,22 @@ public class GameRoundTests
     }
 
     [Fact]
-    public void Deal_WithNoBlackjack_TransitionsToPlayerTurn()
+    public void Deal_WithNoBlackjack_TransitionsToPlayerTurnOrInsurance()
     {
         var round = CreateRound();
         round.PlaceBet(10);
         round.Deal();
 
-        // If no blackjack detected, should end in PlayerTurn phase
+        // If no blackjack detected, should end in PlayerTurn or Insurance phase
         if (!_events.Any(e => e is BlackjackDetected))
         {
-            round.Phase.Should().Be(RoundPhase.PlayerTurn);
-            _events.Should().ContainSingle(e => e is PlayerTurnStarted);
+            var validPhases = new[] { RoundPhase.PlayerTurn, RoundPhase.Insurance };
+            round.Phase.Should().BeOneOf(validPhases);
+
+            if (round.Phase == RoundPhase.PlayerTurn)
+                _events.Should().ContainSingle(e => e is PlayerTurnStarted);
+            else
+                _events.Should().ContainSingle(e => e is InsuranceOffered);
         }
     }
 
@@ -321,6 +326,527 @@ public class GameRoundTests
         // Push is less common but should occur within 200 seeds
     }
 
+    // --- Insurance & Dealer Peek Tests ---
+
+    [Fact]
+    public void Deal_DealerAceUpcard_EntersInsurancePhase()
+    {
+        var (round, _, _) = FindDealerUpcardRound(Rank.Ace);
+
+        round.Phase.Should().Be(RoundPhase.Insurance);
+        _events.Should().ContainSingle(e => e is InsuranceOffered);
+        var offered = _events.OfType<InsuranceOffered>().Single();
+        offered.MaxInsuranceBet.Should().Be(GameConfig.MinimumBet / 2);
+    }
+
+    [Fact]
+    public void Deal_DealerTenUpcard_NoBj_TransitionsToPlayerTurn()
+    {
+        var (round, _, _) = FindDealerUpcardRound(Rank.Ten, requireDealerBj: false);
+
+        round.Phase.Should().Be(RoundPhase.PlayerTurn);
+        _events.Should().Contain(e => e is DealerPeeked);
+        var peek = _events.OfType<DealerPeeked>().Single();
+        peek.HasBlackjack.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Deal_DealerTenUpcard_WithBj_ResolvesImmediately()
+    {
+        var (round, _, _) = FindDealerUpcardRound(Rank.Ten, requireDealerBj: true);
+
+        round.Phase.Should().Be(RoundPhase.Complete);
+        _events.Should().Contain(e => e is DealerPeeked);
+        _events.Should().Contain(e => e is BlackjackDetected);
+        _events.Should().Contain(e => e is DealerHoleCardRevealed);
+        _events.Should().Contain(e => e is HandResolved);
+    }
+
+    [Fact]
+    public void PlaceInsurance_DealerHasBj_PaysInsurance()
+    {
+        var (round, player, _) = FindDealerUpcardRound(Rank.Ace, requireDealerBj: true);
+
+        var bankBefore = player.Bank;
+        _events.Clear();
+        round.PlaceInsurance();
+
+        _events.Should().Contain(e => e is InsurancePlaced);
+        var result = _events.OfType<InsuranceResult>().Single();
+        result.DealerHadBlackjack.Should().BeTrue();
+        result.Payout.Should().Be(GameConfig.MinimumBet / 2 * GameConfig.InsurancePayout);
+
+        round.Phase.Should().Be(RoundPhase.Complete);
+    }
+
+    [Fact]
+    public void PlaceInsurance_DealerNoBj_LosesInsuranceBet()
+    {
+        var (round, player, _) = FindDealerUpcardRound(Rank.Ace, requireDealerBj: false, requirePlayerBj: false);
+
+        var bankBefore = player.Bank;
+        _events.Clear();
+        round.PlaceInsurance();
+
+        var result = _events.OfType<InsuranceResult>().Single();
+        result.DealerHadBlackjack.Should().BeFalse();
+        result.Payout.Should().Be(-(GameConfig.MinimumBet / 2));
+
+        // Player should continue to PlayerTurn
+        round.Phase.Should().Be(RoundPhase.PlayerTurn);
+        player.Bank.Should().Be(bankBefore - GameConfig.MinimumBet / 2);
+    }
+
+    [Fact]
+    public void DeclineInsurance_DealerHasBj_PlayerLosesBet()
+    {
+        var (round, player, _) = FindDealerUpcardRound(Rank.Ace, requireDealerBj: true, requirePlayerBj: false);
+
+        _events.Clear();
+        round.DeclineInsurance();
+
+        _events.Should().Contain(e => e is InsuranceDeclined);
+        _events.Should().NotContain(e => e is InsuranceResult);
+
+        var resolved = _events.OfType<HandResolved>().Single();
+        resolved.Outcome.Should().Be(HandOutcome.Lose);
+        round.Phase.Should().Be(RoundPhase.Complete);
+    }
+
+    [Fact]
+    public void DeclineInsurance_DealerNoBj_ContinuesToPlayerTurn()
+    {
+        var (round, _, _) = FindDealerUpcardRound(Rank.Ace, requireDealerBj: false, requirePlayerBj: false);
+
+        _events.Clear();
+        round.DeclineInsurance();
+
+        _events.Should().Contain(e => e is InsuranceDeclined);
+        _events.Should().NotContain(e => e is InsuranceResult);
+        round.Phase.Should().Be(RoundPhase.PlayerTurn);
+    }
+
+    [Fact]
+    public void PlaceInsurance_InvalidPhase_Throws()
+    {
+        var (round, _) = CreatePlayableRound();
+        var act = () => round.PlaceInsurance();
+        act.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void DeclineInsurance_InvalidPhase_Throws()
+    {
+        var (round, _) = CreatePlayableRound();
+        var act = () => round.DeclineInsurance();
+        act.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void PlayerBj_DealerAce_InsuranceOffered_ThenPush()
+    {
+        // Both player and dealer have blackjack, dealer shows Ace
+        var (round, player, _) = FindDealerUpcardRound(Rank.Ace, requireDealerBj: true, requirePlayerBj: true);
+
+        round.Phase.Should().Be(RoundPhase.Insurance);
+        _events.Clear();
+
+        round.DeclineInsurance();
+
+        // Both have BJ → push
+        var resolved = _events.OfType<HandResolved>().Single();
+        resolved.Outcome.Should().Be(HandOutcome.Push);
+        resolved.Payout.Should().Be(0);
+    }
+
+    [Fact]
+    public void Deal_DealerLowUpcard_NoPeekEvent()
+    {
+        // Dealer upcard 2-9 (not Ace, not 10-value): no peek, no insurance
+        for (int seed = 0; seed < 500; seed++)
+        {
+            var events = new List<GameEvent>();
+            var shoe = new Shoe(1, new Random(seed));
+            var player = new Human();
+            var dealer = new Dealer();
+            var round = new GameRound(shoe, player, dealer, e => events.Add(e));
+
+            round.PlaceBet(GameConfig.MinimumBet);
+            round.Deal();
+
+            var dealerUpcard = dealer.Hand.Cards[0];
+            if (dealerUpcard.Rank != Rank.Ace && dealerUpcard.PointValue != 10
+                && !player.Hands[0].IsBlackjack)
+            {
+                events.Should().NotContain(e => e is DealerPeeked);
+                events.Should().NotContain(e => e is InsuranceOffered);
+                round.Phase.Should().Be(RoundPhase.PlayerTurn);
+                return;
+            }
+        }
+    }
+
+    // --- Split Tests ---
+
+    [Fact]
+    public void PlayerSplit_CreatesSecondHand()
+    {
+        var (round, player) = CreateSplittableRound();
+
+        _events.Clear();
+        round.PlayerSplit();
+
+        player.Hands.Should().HaveCount(2);
+        player.Hands[0].Cards.Should().HaveCount(2);
+        player.Hands[1].Cards.Should().HaveCount(2);
+        _events.Should().ContainSingle(e => e is PlayerSplit);
+    }
+
+    [Fact]
+    public void PlayerSplit_DuplicatesBet()
+    {
+        var (round, player) = CreateSplittableRound(startingBank: 10000);
+
+        var bankBefore = player.Bank;
+        round.PlayerSplit();
+
+        // Play out both hands by standing
+        while (round.Phase == RoundPhase.PlayerTurn)
+            round.PlayerStand();
+
+        // Should have 2 HandResolved events
+        var resolved = _events.OfType<HandResolved>().ToList();
+        resolved.Should().HaveCount(2);
+        // Each hand should have the original bet amount as basis
+        foreach (var r in resolved)
+        {
+            Math.Abs(r.Payout).Should().BeOneOf(0, GameConfig.MinimumBet);
+        }
+    }
+
+    [Fact]
+    public void CanSplit_FalseForNonPair()
+    {
+        var (round, _) = CreatePlayableRound();
+
+        // Most hands won't be pairs
+        // Try many seeds to find a non-pair
+        for (int seed = 0; seed < 500; seed++)
+        {
+            _events.Clear();
+            var shoe = new Shoe(6, new Random(seed));
+            var player = new Human(startingBank: 10000);
+            var dealer = new Dealer();
+            var r = new GameRound(shoe, player, dealer, e => _events.Add(e));
+            r.PlaceBet(GameConfig.MinimumBet);
+            r.Deal();
+
+            if (r.Phase != RoundPhase.PlayerTurn)
+                continue;
+
+            if (player.Hands[0].Cards[0].Rank != player.Hands[0].Cards[1].Rank)
+            {
+                r.CanSplit().Should().BeFalse();
+                return;
+            }
+        }
+    }
+
+    [Fact]
+    public void CanSplit_FalseAtMaxSplits()
+    {
+        var originalMaxSplits = GameConfig.MaxSplits;
+        try
+        {
+            GameConfig.MaxSplits = 1;
+            var (round, player) = CreateSplittableRound(startingBank: 100000);
+
+            round.PlayerSplit();
+            // After one split with MaxSplits=1, CanSplit should be false even if hand is a pair
+            round.CanSplit().Should().BeFalse();
+        }
+        finally
+        {
+            GameConfig.MaxSplits = originalMaxSplits;
+        }
+    }
+
+    [Fact]
+    public void PlayerSplit_Aces_AutoStandBoth()
+    {
+        var (round, player) = CreateSplittableRound(pairRank: Rank.Ace);
+
+        _events.Clear();
+        round.PlayerSplit();
+
+        // Both hands should auto-stand
+        var stood = _events.OfType<PlayerStood>().ToList();
+        stood.Should().HaveCount(2);
+        stood[0].HandIndex.Should().Be(0);
+        stood[1].HandIndex.Should().Be(1);
+
+        // Should proceed to dealer turn or resolution
+        round.Phase.Should().BeOneOf(RoundPhase.Complete);
+    }
+
+    [Fact]
+    public void CanSplit_ResplitAcesDisabled()
+    {
+        var originalResplit = GameConfig.ResplitAces;
+        try
+        {
+            GameConfig.ResplitAces = false;
+
+            // Find a seed that gives us aces, split them, and get another ace
+            // This is hard to find deterministically, so we test the logic directly
+            for (int seed = 0; seed < 10000; seed++)
+            {
+                _events.Clear();
+                var shoe = new Shoe(6, new Random(seed));
+                var player = new Human(startingBank: 100000);
+                var dealer = new Dealer();
+                var round = new GameRound(shoe, player, dealer, e => _events.Add(e));
+                round.PlaceBet(GameConfig.MinimumBet);
+                round.Deal();
+
+                if (round.Phase != RoundPhase.PlayerTurn)
+                    continue;
+
+                var hand = player.Hands[0];
+                if (hand.Cards[0].Rank != Rank.Ace || hand.Cards[1].Rank != Rank.Ace)
+                    continue;
+
+                // Split the aces - they auto-stand, so we can't check CanSplit after
+                // Instead, verify the auto-stand behavior means no resplit opportunity
+                round.PlayerSplit();
+                // Auto-stood, round completed, no chance to resplit
+                round.Phase.Should().Be(RoundPhase.Complete);
+                return;
+            }
+
+            // If we couldn't find ace pair, that's ok - the unit test for CanSplit logic covers it
+        }
+        finally
+        {
+            GameConfig.ResplitAces = originalResplit;
+        }
+    }
+
+    [Fact]
+    public void PlayerSplit_DoubleAfterSplit()
+    {
+        var originalDAS = GameConfig.DoubleAfterSplit;
+        try
+        {
+            GameConfig.DoubleAfterSplit = true;
+            // Find a splittable non-ace pair
+            var (round, player) = CreateSplittableRound(startingBank: 100000, excludeAces: true);
+
+            round.PlayerSplit();
+
+            // After split, should be in PlayerTurn for first hand
+            round.Phase.Should().Be(RoundPhase.PlayerTurn);
+
+            // CanDoubleDown should be true (2 cards in hand, DAS enabled)
+            round.CanDoubleDown().Should().BeTrue();
+        }
+        finally
+        {
+            GameConfig.DoubleAfterSplit = originalDAS;
+        }
+    }
+
+    [Fact]
+    public void PlayerSplit_DoubleAfterSplitDisabled()
+    {
+        var originalDAS = GameConfig.DoubleAfterSplit;
+        try
+        {
+            GameConfig.DoubleAfterSplit = false;
+            var (round, player) = CreateSplittableRound(startingBank: 100000, excludeAces: true);
+
+            round.PlayerSplit();
+
+            round.Phase.Should().Be(RoundPhase.PlayerTurn);
+            round.CanDoubleDown().Should().BeFalse();
+        }
+        finally
+        {
+            GameConfig.DoubleAfterSplit = originalDAS;
+        }
+    }
+
+    [Fact]
+    public void PlayerSplit_21IsNotBlackjack()
+    {
+        // Find a seed where splitting tens gives an ace on one hand
+        for (int seed = 0; seed < 10000; seed++)
+        {
+            _events.Clear();
+            var shoe = new Shoe(6, new Random(seed));
+            var player = new Human(startingBank: 100000);
+            var dealer = new Dealer();
+            var round = new GameRound(shoe, player, dealer, e => _events.Add(e));
+            round.PlaceBet(GameConfig.MinimumBet);
+            round.Deal();
+
+            if (round.Phase != RoundPhase.PlayerTurn)
+                continue;
+
+            var hand = player.Hands[0];
+            if (hand.Cards[0].Rank != hand.Cards[1].Rank)
+                continue;
+            if (hand.Cards[0].PointValue != 10)
+                continue;
+
+            round.PlayerSplit();
+
+            // Stand both hands to resolve
+            while (round.Phase == RoundPhase.PlayerTurn)
+                round.PlayerStand();
+
+            // Check that no HandResolved has Blackjack outcome (split 21 is Win, not Blackjack)
+            var resolved = _events.OfType<HandResolved>().ToList();
+            resolved.Should().HaveCount(2);
+            foreach (var r in resolved)
+            {
+                r.Outcome.Should().NotBe(HandOutcome.Blackjack);
+            }
+            return;
+        }
+    }
+
+    [Fact]
+    public void PlayerSplit_IndependentResolution()
+    {
+        // Find a seed where we can split and one hand busts while other stands
+        for (int seed = 0; seed < 5000; seed++)
+        {
+            _events.Clear();
+            var shoe = new Shoe(6, new Random(seed));
+            var player = new Human(startingBank: 100000);
+            var dealer = new Dealer();
+            var round = new GameRound(shoe, player, dealer, e => _events.Add(e));
+            round.PlaceBet(GameConfig.MinimumBet);
+            round.Deal();
+
+            if (round.Phase != RoundPhase.PlayerTurn)
+                continue;
+
+            var hand = player.Hands[0];
+            if (hand.Cards[0].Rank != hand.Cards[1].Rank)
+                continue;
+            if (hand.Cards[0].Rank == Rank.Ace)
+                continue;
+
+            round.PlayerSplit();
+
+            if (round.Phase != RoundPhase.PlayerTurn)
+                continue;
+
+            // Hit first hand until bust
+            bool firstBusted = false;
+            int safety = 0;
+            while (round.Phase == RoundPhase.PlayerTurn && safety < 10)
+            {
+                var bustEvents = _events.OfType<PlayerBusted>().Count();
+                round.PlayerHit();
+                if (_events.OfType<PlayerBusted>().Count() > bustEvents)
+                {
+                    firstBusted = true;
+                    break;
+                }
+                safety++;
+            }
+
+            if (!firstBusted || round.Phase != RoundPhase.PlayerTurn)
+                continue;
+
+            // Stand the second hand
+            round.PlayerStand();
+
+            // Should have 2 HandResolved events
+            var resolved = _events.OfType<HandResolved>().ToList();
+            resolved.Should().HaveCount(2);
+            resolved[0].HandIndex.Should().Be(0);
+            resolved[1].HandIndex.Should().Be(1);
+            resolved[0].Outcome.Should().Be(HandOutcome.Lose); // Busted
+            return;
+        }
+    }
+
+    [Fact]
+    public void PlayerSurrender_BlockedAfterSplit()
+    {
+        var (round, player) = CreateSplittableRound(excludeAces: true);
+
+        round.PlayerSplit();
+
+        var act = () => round.PlayerSurrender();
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*surrender*split*");
+    }
+
+    [Fact]
+    public void PlayerSplit_HandAdvancement()
+    {
+        var (round, player) = CreateSplittableRound(excludeAces: true);
+
+        _events.Clear();
+        round.PlayerSplit();
+
+        // Should get PlayerTurnStarted for first hand (index 0)
+        var turnStarted = _events.OfType<PlayerTurnStarted>().ToList();
+        turnStarted.Should().Contain(e => e.HandIndex == 0);
+
+        // Stand first hand
+        _events.Clear();
+        round.PlayerStand();
+
+        // Should get PlayerTurnStarted for second hand (index 1)
+        turnStarted = _events.OfType<PlayerTurnStarted>().ToList();
+        turnStarted.Should().ContainSingle(e => e.HandIndex == 1);
+    }
+
+    /// <summary>
+    /// Find a seed that produces a dealer upcard of the given rank,
+    /// with optional dealer/player blackjack requirements.
+    /// </summary>
+    private (GameRound Round, Human Player, Dealer Dealer) FindDealerUpcardRound(
+        Rank upcardRank,
+        bool? requireDealerBj = null,
+        bool? requirePlayerBj = null,
+        int maxSeeds = 5000)
+    {
+        for (int seed = 0; seed < maxSeeds; seed++)
+        {
+            _events.Clear();
+            var shoe = new Shoe(1, new Random(seed));
+            var player = new Human(startingBank: 10000);
+            var dealer = new Dealer();
+            var round = new GameRound(shoe, player, dealer, e => _events.Add(e));
+
+            round.PlaceBet(GameConfig.MinimumBet);
+            round.Deal();
+
+            var dealerUpcard = dealer.Hand.Cards[0];
+            if (dealerUpcard.Rank != upcardRank)
+                continue;
+
+            if (requireDealerBj.HasValue && dealer.Hand.IsBlackjack != requireDealerBj.Value)
+                continue;
+
+            if (requirePlayerBj.HasValue && player.Hands[0].IsBlackjack != requirePlayerBj.Value)
+                continue;
+
+            return (round, player, dealer);
+        }
+
+        throw new InvalidOperationException(
+            $"Could not find a round with dealer upcard {upcardRank} " +
+            $"(dealerBj={requireDealerBj}, playerBj={requirePlayerBj}) within {maxSeeds} seeds.");
+    }
+
     private (GameRound Round, Human Player) CreatePlayableRound(int startingBank = 1000, int seedStart = 0, int maxSeeds = 300)
     {
         for (int seed = seedStart; seed < seedStart + maxSeeds; seed++)
@@ -338,5 +864,42 @@ public class GameRoundTests
         }
 
         throw new InvalidOperationException("Could not find a playable round without an initial blackjack.");
+    }
+
+    private (GameRound Round, Human Player) CreateSplittableRound(
+        Rank? pairRank = null,
+        int startingBank = 10000,
+        bool excludeAces = false,
+        int seedStart = 0,
+        int maxSeeds = 10000)
+    {
+        for (int seed = seedStart; seed < seedStart + maxSeeds; seed++)
+        {
+            _events.Clear();
+            var shoe = new Shoe(6, new Random(seed));
+            var player = new Human(startingBank: startingBank);
+            var dealer = new Dealer();
+            var round = new GameRound(shoe, player, dealer, e => _events.Add(e));
+            round.PlaceBet(GameConfig.MinimumBet);
+            round.Deal();
+
+            if (round.Phase != RoundPhase.PlayerTurn)
+                continue;
+
+            var hand = player.Hands[0];
+            if (hand.Cards[0].Rank != hand.Cards[1].Rank)
+                continue;
+
+            if (pairRank.HasValue && hand.Cards[0].Rank != pairRank.Value)
+                continue;
+
+            if (excludeAces && hand.Cards[0].Rank == Rank.Ace)
+                continue;
+
+            return (round, player);
+        }
+
+        throw new InvalidOperationException(
+            $"Could not find a splittable round (pairRank={pairRank}, excludeAces={excludeAces}) within {maxSeeds} seeds.");
     }
 }

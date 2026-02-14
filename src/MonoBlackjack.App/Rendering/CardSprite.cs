@@ -31,7 +31,7 @@ public class CardSprite : Sprite
 
         var destRect = new Rectangle(
             (int)Position.X, (int)Position.Y,
-            (int)(Size.X * Scale), (int)(Size.Y * Scale));
+            (int)(Size.X * Scale * ScaleX), (int)(Size.Y * Scale));
 
         spriteBatch.Draw(
             texture,

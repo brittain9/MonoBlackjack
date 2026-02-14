@@ -13,6 +13,7 @@ public class Sprite
     public Vector2 Position { get; set; }
     public Vector2 Size { get; set; }
     public float Scale { get; set; } = 1f;
+    public float ScaleX { get; set; } = 1f;
     public float Rotation { get; set; }
     public float Opacity { get; set; } = 1f;
     public bool Visible { get; set; } = true;
@@ -26,7 +27,7 @@ public class Sprite
 
         var destRect = new Rectangle(
             (int)Position.X, (int)Position.Y,
-            (int)(Size.X * Scale), (int)(Size.Y * Scale));
+            (int)(Size.X * Scale * ScaleX), (int)(Size.Y * Scale));
 
         spriteBatch.Draw(
             Texture,

@@ -17,13 +17,22 @@ public record CardDealt(Card Card, string Recipient, int HandIndex, bool FaceDow
 public record InitialDealComplete : GameEvent;
 public record BlackjackDetected(string Who) : GameEvent;
 
+// Insurance
+public record InsuranceOffered(string PlayerName, decimal MaxInsuranceBet) : GameEvent;
+public record InsurancePlaced(string PlayerName, decimal Amount) : GameEvent;
+public record InsuranceDeclined(string PlayerName) : GameEvent;
+public record InsuranceResult(string PlayerName, bool DealerHadBlackjack, decimal Payout) : GameEvent;
+
+// Dealer peek
+public record DealerPeeked(bool HasBlackjack) : GameEvent;
+
 // Player turn
-public record PlayerTurnStarted(string PlayerName) : GameEvent;
+public record PlayerTurnStarted(string PlayerName, int HandIndex = 0) : GameEvent;
 public record PlayerHit(string PlayerName, Card Card, int HandIndex) : GameEvent;
 public record PlayerStood(string PlayerName, int HandIndex) : GameEvent;
 public record PlayerBusted(string PlayerName, int HandIndex) : GameEvent;
 public record PlayerDoubledDown(string PlayerName, Card Card, int HandIndex) : GameEvent;
-public record PlayerSplit(string PlayerName, int HandIndex) : GameEvent;
+public record PlayerSplit(string PlayerName, int OriginalHandIndex, int NewHandIndex, Card SplitCard) : GameEvent;
 public record PlayerSurrendered(string PlayerName, int HandIndex) : GameEvent;
 
 // Dealer turn
