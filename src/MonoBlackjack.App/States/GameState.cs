@@ -29,6 +29,8 @@ internal class GameState : State
     private readonly Button _hitButton;
     private readonly Button _standButton;
     private readonly Button _splitButton;
+    private readonly Button _doubleButton;
+    private readonly Button _surrenderButton;
     private readonly Button _insuranceButton;
     private readonly Button _declineInsuranceButton;
     private readonly List<TrackedCardSprite> _trackedCards = [];
@@ -83,6 +85,16 @@ internal class GameState : State
             Text = "Split",
             PenColor = Color.Black
         };
+        _doubleButton = new Button(buttonTexture, _font)
+        {
+            Text = "Double",
+            PenColor = Color.Black
+        };
+        _surrenderButton = new Button(buttonTexture, _font)
+        {
+            Text = "Surrender",
+            PenColor = Color.Black
+        };
         _insuranceButton = new Button(buttonTexture, _font)
         {
             Text = "Insurance",
@@ -97,12 +109,15 @@ internal class GameState : State
         _hitButton.Click += OnHitClicked;
         _standButton.Click += OnStandClicked;
         _splitButton.Click += OnSplitClicked;
+        _doubleButton.Click += OnDoubleClicked;
+        _surrenderButton.Click += OnSurrenderClicked;
         _insuranceButton.Click += OnInsuranceClicked;
         _declineInsuranceButton.Click += OnDeclineInsuranceClicked;
 
         _eventBus.Subscribe<CardDealt>(OnCardDealt);
         _eventBus.Subscribe<InitialDealComplete>(OnInitialDealComplete);
         _eventBus.Subscribe<PlayerHit>(OnPlayerHit);
+        _eventBus.Subscribe<PlayerDoubledDown>(OnPlayerDoubledDown);
         _eventBus.Subscribe<PlayerBusted>(OnPlayerBusted);
         _eventBus.Subscribe<PlayerStood>(OnPlayerStood);
         _eventBus.Subscribe<PlayerTurnStarted>(OnPlayerTurnStarted);
@@ -141,13 +156,18 @@ internal class GameState : State
         _hitButton.Size = buttonSize;
         _standButton.Size = buttonSize;
         _splitButton.Size = buttonSize;
+        _doubleButton.Size = buttonSize;
+        _surrenderButton.Size = buttonSize;
         _insuranceButton.Size = buttonSize;
         _declineInsuranceButton.Size = buttonSize;
 
-        // Three-button layout: Hit | Split | Stand
+        // Primary actions row: Hit | Split | Stand
         _hitButton.Position = new Vector2(centerX - gap * 1.1f, buttonY);
         _splitButton.Position = new Vector2(centerX, buttonY);
         _standButton.Position = new Vector2(centerX + gap * 1.1f, buttonY);
+        var secondaryY = buttonY + buttonSize.Y + vp.Height / 80f;
+        _doubleButton.Position = new Vector2(centerX - gap * 0.8f, secondaryY);
+        _surrenderButton.Position = new Vector2(centerX + gap * 0.8f, secondaryY);
         _insuranceButton.Position = new Vector2(centerX - gap, buttonY);
         _declineInsuranceButton.Position = new Vector2(centerX + gap, buttonY);
     }
@@ -350,6 +370,11 @@ internal class GameState : State
         AddAnimatedCard(evt.Card, false, _player.Name, evt.HandIndex, 0f);
     }
 
+    private void OnPlayerDoubledDown(PlayerDoubledDown evt)
+    {
+        AddAnimatedCard(evt.Card, false, _player.Name, evt.HandIndex, 0f);
+    }
+
     private void OnPlayerBusted(PlayerBusted evt)
     {
         var pos = GetOutcomeLabelPosition(evt.HandIndex);
@@ -499,6 +524,28 @@ internal class GameState : State
         _eventBus.Flush();
     }
 
+    private void OnDoubleClicked(object? sender, EventArgs e)
+    {
+        if (!IsPlayerInteractionEnabled())
+            return;
+        if (!_round.CanDoubleDown())
+            return;
+
+        _round.PlayerDoubleDown();
+        _eventBus.Flush();
+    }
+
+    private void OnSurrenderClicked(object? sender, EventArgs e)
+    {
+        if (!IsPlayerInteractionEnabled())
+            return;
+        if (!_round.CanSurrender())
+            return;
+
+        _round.PlayerSurrender();
+        _eventBus.Flush();
+    }
+
     private void OnInsuranceClicked(object? sender, EventArgs e)
     {
         if (!IsInsuranceInteractionEnabled())
@@ -529,6 +576,10 @@ internal class GameState : State
             _standButton.Update(gameTime);
             if (_round.CanSplit())
                 _splitButton.Update(gameTime);
+            if (_round.CanDoubleDown())
+                _doubleButton.Update(gameTime);
+            if (_round.CanSurrender())
+                _surrenderButton.Update(gameTime);
         }
         else if (IsInsuranceInteractionEnabled())
         {
@@ -560,6 +611,10 @@ internal class GameState : State
             _standButton.Draw(gameTime, spriteBatch);
             if (_round.CanSplit())
                 _splitButton.Draw(gameTime, spriteBatch);
+            if (_round.CanDoubleDown())
+                _doubleButton.Draw(gameTime, spriteBatch);
+            if (_round.CanSurrender())
+                _surrenderButton.Draw(gameTime, spriteBatch);
 
             // Draw active hand indicator when multiple hands
             if (GetPlayerHandCount() > 1)

@@ -171,36 +171,129 @@ public class GameRoundTests
     }
 
     [Fact]
+    public void CanDoubleDown_TenToElevenRestriction_AllowsTenOrEleven()
+    {
+        var originalRestriction = GameConfig.DoubleDownRestriction;
+        try
+        {
+            GameConfig.DoubleDownRestriction = DoubleDownRestriction.TenToEleven;
+
+            for (int seed = 0; seed < 5000; seed++)
+            {
+                _events.Clear();
+                var shoe = new Shoe(1, new Random(seed));
+                var player = new Human(startingBank: 10000);
+                var dealer = new Dealer();
+                var round = new GameRound(shoe, player, dealer, e => _events.Add(e));
+
+                round.PlaceBet(GameConfig.MinimumBet);
+                round.Deal();
+
+                if (round.Phase != RoundPhase.PlayerTurn)
+                    continue;
+
+                var value = player.Hands[0].Value;
+                if (value is not (10 or 11))
+                    continue;
+
+                round.CanDoubleDown().Should().BeTrue();
+                return;
+            }
+
+            throw new InvalidOperationException("Could not find an opening hand totaling 10 or 11.");
+        }
+        finally
+        {
+            GameConfig.DoubleDownRestriction = originalRestriction;
+        }
+    }
+
+    [Fact]
+    public void CanDoubleDown_TenToElevenRestriction_BlocksOtherTotals()
+    {
+        var originalRestriction = GameConfig.DoubleDownRestriction;
+        try
+        {
+            GameConfig.DoubleDownRestriction = DoubleDownRestriction.TenToEleven;
+
+            for (int seed = 0; seed < 5000; seed++)
+            {
+                _events.Clear();
+                var shoe = new Shoe(1, new Random(seed));
+                var player = new Human(startingBank: 10000);
+                var dealer = new Dealer();
+                var round = new GameRound(shoe, player, dealer, e => _events.Add(e));
+
+                round.PlaceBet(GameConfig.MinimumBet);
+                round.Deal();
+
+                if (round.Phase != RoundPhase.PlayerTurn)
+                    continue;
+
+                var value = player.Hands[0].Value;
+                if (value is 10 or 11)
+                    continue;
+
+                round.CanDoubleDown().Should().BeFalse();
+                return;
+            }
+
+            throw new InvalidOperationException("Could not find an opening hand outside 10 or 11.");
+        }
+        finally
+        {
+            GameConfig.DoubleDownRestriction = originalRestriction;
+        }
+    }
+
+    [Fact]
     public void PlayerSurrender_HalvesBetAndCompletes()
     {
-        var shoe = new Shoe(1, new Random(42));
-        var player = new Human(startingBank: 1000);
-        var dealer = new Dealer();
-        var round = new GameRound(shoe, player, dealer, e => _events.Add(e));
+        var originalLateSurrender = GameConfig.AllowLateSurrender;
+        var originalEarlySurrender = GameConfig.AllowEarlySurrender;
+        try
+        {
+            GameConfig.AllowLateSurrender = true;
+            GameConfig.AllowEarlySurrender = false;
 
-        round.PlaceBet(100);
-        round.Deal();
+            var shoe = new Shoe(1, new Random(42));
+            var player = new Human(startingBank: 1000);
+            var dealer = new Dealer();
+            var round = new GameRound(shoe, player, dealer, e => _events.Add(e));
 
-        if (round.Phase != RoundPhase.PlayerTurn)
-            return;
+            round.PlaceBet(100);
+            round.Deal();
 
-        var bankBefore = player.Bank;
-        round.PlayerSurrender();
+            if (round.Phase != RoundPhase.PlayerTurn)
+                return;
 
-        _events.Should().Contain(e => e is PlayerSurrendered);
-        var resolved = _events.OfType<HandResolved>().Last();
-        resolved.Outcome.Should().Be(HandOutcome.Surrender);
-        resolved.Payout.Should().Be(-50);
-        round.Phase.Should().Be(RoundPhase.Complete);
+            var bankBefore = player.Bank;
+            round.PlayerSurrender();
+
+            _events.Should().Contain(e => e is PlayerSurrendered);
+            var resolved = _events.OfType<HandResolved>().Last();
+            resolved.Outcome.Should().Be(HandOutcome.Surrender);
+            resolved.Payout.Should().Be(-50);
+            round.Phase.Should().Be(RoundPhase.Complete);
+        }
+        finally
+        {
+            GameConfig.AllowLateSurrender = originalLateSurrender;
+            GameConfig.AllowEarlySurrender = originalEarlySurrender;
+        }
     }
 
     [Fact]
     public void PlayerSurrender_WithOddMinimumBet_KeepsFractionalBankroll()
     {
         var originalMinimum = GameConfig.MinimumBet;
+        var originalLateSurrender = GameConfig.AllowLateSurrender;
+        var originalEarlySurrender = GameConfig.AllowEarlySurrender;
         try
         {
             GameConfig.MinimumBet = 5m;
+            GameConfig.AllowLateSurrender = true;
+            GameConfig.AllowEarlySurrender = false;
             var (round, player) = CreatePlayableRound(startingBank: 1000, seedStart: 100);
             var bankBefore = player.Bank;
 
@@ -212,6 +305,74 @@ public class GameRoundTests
         finally
         {
             GameConfig.MinimumBet = originalMinimum;
+            GameConfig.AllowLateSurrender = originalLateSurrender;
+            GameConfig.AllowEarlySurrender = originalEarlySurrender;
+        }
+    }
+
+    [Fact]
+    public void PlayerSurrender_WhenSurrenderDisabled_Throws()
+    {
+        var originalLateSurrender = GameConfig.AllowLateSurrender;
+        var originalEarlySurrender = GameConfig.AllowEarlySurrender;
+        try
+        {
+            GameConfig.AllowLateSurrender = false;
+            GameConfig.AllowEarlySurrender = false;
+            var (round, _) = CreatePlayableRound();
+
+            var act = () => round.PlayerSurrender();
+            act.Should().Throw<InvalidOperationException>()
+                .WithMessage("*surrender*rules*");
+        }
+        finally
+        {
+            GameConfig.AllowLateSurrender = originalLateSurrender;
+            GameConfig.AllowEarlySurrender = originalEarlySurrender;
+        }
+    }
+
+    [Fact]
+    public void PlayerSurrender_AfterHit_Throws()
+    {
+        var originalLateSurrender = GameConfig.AllowLateSurrender;
+        var originalEarlySurrender = GameConfig.AllowEarlySurrender;
+        try
+        {
+            GameConfig.AllowLateSurrender = true;
+            GameConfig.AllowEarlySurrender = false;
+
+            for (int seed = 0; seed < 5000; seed++)
+            {
+                _events.Clear();
+                var shoe = new Shoe(1, new Random(seed));
+                var player = new Human(startingBank: 10000);
+                var dealer = new Dealer();
+                var round = new GameRound(shoe, player, dealer, e => _events.Add(e));
+
+                round.PlaceBet(GameConfig.MinimumBet);
+                round.Deal();
+
+                if (round.Phase != RoundPhase.PlayerTurn)
+                    continue;
+
+                round.PlayerHit();
+
+                if (round.Phase != RoundPhase.PlayerTurn)
+                    continue;
+
+                var act = () => round.PlayerSurrender();
+                act.Should().Throw<InvalidOperationException>()
+                    .WithMessage("*surrender*");
+                return;
+            }
+
+            throw new InvalidOperationException("Could not find a round where surrender after hit can be validated.");
+        }
+        finally
+        {
+            GameConfig.AllowLateSurrender = originalLateSurrender;
+            GameConfig.AllowEarlySurrender = originalEarlySurrender;
         }
     }
 

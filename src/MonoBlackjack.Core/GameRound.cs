@@ -256,13 +256,15 @@ public class GameRound
             throw new InvalidOperationException($"Cannot surrender in phase {Phase}");
         if (_splitCount > 0)
             throw new InvalidOperationException("Cannot surrender after splitting.");
+        if (!CanSurrender())
+            throw new InvalidOperationException("Cannot surrender for this hand state or rules.");
 
-        _publish(new PlayerSurrendered(_player.Name, 0));
+        _publish(new PlayerSurrendered(_player.Name, _currentHandIndex));
         Phase = RoundPhase.Resolution;
 
-        var payout = -_bets[0] / 2;
+        var payout = -_bets[_currentHandIndex] / 2;
         _player.Bank += payout;
-        _publish(new HandResolved(_player.Name, 0, HandOutcome.Surrender, payout));
+        _publish(new HandResolved(_player.Name, _currentHandIndex, HandOutcome.Surrender, payout));
         _publish(new RoundComplete());
         Phase = RoundPhase.Complete;
     }
@@ -365,8 +367,22 @@ public class GameRound
 
     public bool CanDoubleDown()
     {
+        if (Phase != RoundPhase.PlayerTurn)
+            return false;
+
         var hand = CurrentHand;
         if (hand.Cards.Count != 2)
+            return false;
+
+        bool allowedByRestriction = GameConfig.DoubleDownRestriction switch
+        {
+            DoubleDownRestriction.AnyTwoCards => true,
+            DoubleDownRestriction.NineToEleven => hand.Value is >= 9 and <= 11,
+            DoubleDownRestriction.TenToEleven => hand.Value is >= 10 and <= 11,
+            _ => true
+        };
+
+        if (!allowedByRestriction)
             return false;
 
         if (_bets[_currentHandIndex] * 2 > GameConfig.MaximumBet)
@@ -377,6 +393,23 @@ public class GameRound
             return false;
 
         return _player.Bank >= _bets[_currentHandIndex];
+    }
+
+    public bool CanSurrender()
+    {
+        if (Phase != RoundPhase.PlayerTurn)
+            return false;
+
+        if (_splitCount > 0)
+            return false;
+
+        if (_currentHandIndex != 0)
+            return false;
+
+        if (CurrentHand.Cards.Count != 2)
+            return false;
+
+        return GameConfig.AllowLateSurrender || GameConfig.AllowEarlySurrender;
     }
 
     private void AdvanceToNextHand()

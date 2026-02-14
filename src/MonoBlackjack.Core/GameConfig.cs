@@ -1,5 +1,12 @@
 namespace MonoBlackjack.Core;
 
+public enum DoubleDownRestriction
+{
+    AnyTwoCards,
+    NineToEleven,
+    TenToEleven
+}
+
 /// <summary>
 /// Global game configuration. All rules are configurable for simulation/testing.
 /// </summary>
@@ -51,6 +58,11 @@ public static class GameConfig
     /// Allow doubling down after splitting a pair.
     /// </summary>
     public static bool DoubleAfterSplit = true;
+
+    /// <summary>
+    /// Restrict double-down to specific starting hand values.
+    /// </summary>
+    public static DoubleDownRestriction DoubleDownRestriction = DoubleDownRestriction.AnyTwoCards;
 
     /// <summary>
     /// Allow re-splitting aces (rare, player-favorable).
