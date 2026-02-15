@@ -54,6 +54,14 @@ public sealed class DatabaseManager
                 CreatedUtc  TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS ProfileSetting (
+                ProfileId     INTEGER NOT NULL REFERENCES Profile(Id),
+                SettingKey    TEXT NOT NULL,
+                SettingValue  TEXT NOT NULL,
+                UpdatedUtc    TEXT NOT NULL,
+                PRIMARY KEY (ProfileId, SettingKey)
+            );
+
             CREATE TABLE IF NOT EXISTS Session (
                 Id                INTEGER PRIMARY KEY AUTOINCREMENT,
                 ProfileId         INTEGER NOT NULL REFERENCES Profile(Id),
@@ -111,6 +119,7 @@ public sealed class DatabaseManager
             CREATE INDEX IF NOT EXISTS IX_Round_ProfileId ON Round(ProfileId);
             CREATE INDEX IF NOT EXISTS IX_Round_SessionId ON Round(SessionId);
             CREATE INDEX IF NOT EXISTS IX_Session_ProfileId ON Session(ProfileId);
+            CREATE INDEX IF NOT EXISTS IX_ProfileSetting_ProfileId ON ProfileSetting(ProfileId);
             CREATE INDEX IF NOT EXISTS IX_Decision_Action ON Decision(Action);
             CREATE INDEX IF NOT EXISTS IX_Decision_PlayerValue ON Decision(PlayerValue);
             CREATE INDEX IF NOT EXISTS IX_Decision_DealerUpcard ON Decision(DealerUpcard);

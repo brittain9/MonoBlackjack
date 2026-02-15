@@ -107,6 +107,40 @@ public sealed class SqliteRepositoriesTests
         }
     }
 
+    [Fact]
+    public void SettingsRepository_SaveAndLoad_RoundTripsValues()
+    {
+        var (database, path) = CreateDatabase();
+        try
+        {
+            var profiles = new SqliteProfileRepository(database);
+            var settingsRepo = new SqliteSettingsRepository(database);
+            var profile = profiles.GetOrCreateProfile("Default");
+
+            var settings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [GameConfig.SettingDealerHitsSoft17] = "True",
+                [GameConfig.SettingBlackjackPayout] = "3:2",
+                [GameConfig.SettingNumberOfDecks] = "6",
+                [GameConfig.SettingSurrenderRule] = "none",
+                [GameConfig.SettingDoubleAfterSplit] = "True",
+                [GameConfig.SettingResplitAces] = "False",
+                [GameConfig.SettingMaxSplits] = "3",
+                [GameConfig.SettingDoubleDownRestriction] = DoubleDownRestriction.NineToEleven.ToString(),
+                [GameConfig.SettingPenetrationPercent] = "75"
+            };
+
+            settingsRepo.SaveSettings(profile.Id, settings);
+            var loaded = settingsRepo.LoadSettings(profile.Id);
+
+            loaded.Should().BeEquivalentTo(settings);
+        }
+        finally
+        {
+            TryDelete(path);
+        }
+    }
+
     private static RoundRecord CreateRoundRecord(
         RuleFingerprint rules,
         decimal bet,

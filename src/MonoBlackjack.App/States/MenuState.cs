@@ -53,10 +53,27 @@ internal class MenuState : State
                 _game.ActiveProfileId)); 
         };
 
-        // This button is below the n
-        var quitGameButton = new Button(buttonTexture, buttonFont)
+        var settingsButton = new Button(buttonTexture, buttonFont)
         {
             Position = new Vector2(playButton.Position.X, playButton.Position.Y + CompSpacing),
+            Text = "Settings",
+            Size = buttonSize,
+            PenColor = Color.Black
+        };
+        settingsButton.Click += (s, e) =>
+        {
+            _game.ChangeState(new SettingsState(
+                _game,
+                _graphicsDevice,
+                content,
+                _game.SettingsRepository,
+                _game.ActiveProfileId));
+        };
+
+        // This button is below the settings button
+        var quitGameButton = new Button(buttonTexture, buttonFont)
+        {
+            Position = new Vector2(settingsButton.Position.X, settingsButton.Position.Y + CompSpacing),
             Text = "Quit",
             Size = buttonSize,
             PenColor = Color.Black
@@ -68,7 +85,7 @@ internal class MenuState : State
 
         _components = new List<Component>()
         {
-            playButton, quitGameButton,
+            playButton, settingsButton, quitGameButton,
         };
     }
 

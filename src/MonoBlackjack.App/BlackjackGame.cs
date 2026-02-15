@@ -1,5 +1,6 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using MonoBlackjack.Core;
 using MonoBlackjack.Core.Ports;
 using MonoBlackjack.Data;
 using MonoBlackjack.Data.Repositories;
@@ -15,9 +16,11 @@ public class BlackjackGame : Microsoft.Xna.Framework.Game
     private DatabaseManager _database = null!;
     private IProfileRepository _profileRepository = null!;
     private IStatsRepository _statsRepository = null!;
+    private ISettingsRepository _settingsRepository = null!;
 
     public void ChangeState(State state) => _nextState = state;
     public IStatsRepository StatsRepository => _statsRepository;
+    public ISettingsRepository SettingsRepository => _settingsRepository;
     public int ActiveProfileId { get; private set; }
 
     public BlackjackGame()
@@ -44,11 +47,16 @@ public class BlackjackGame : Microsoft.Xna.Framework.Game
         _database = new DatabaseManager();
         _profileRepository = new SqliteProfileRepository(_database);
         _statsRepository = new SqliteStatsRepository(_database);
+        _settingsRepository = new SqliteSettingsRepository(_database);
 
         var active = _profileRepository.GetActiveProfile()
             ?? _profileRepository.GetOrCreateProfile("Default");
         _profileRepository.SetActiveProfile(active.Id);
         ActiveProfileId = active.Id;
+
+        var persistedSettings = _settingsRepository.LoadSettings(ActiveProfileId);
+        if (persistedSettings.Count > 0)
+            GameConfig.ApplySettings(persistedSettings);
 
         _spriteBatch = new SpriteBatch(GraphicsDevice);
         _currentState = new MenuState(this, _graphics.GraphicsDevice, Content);
