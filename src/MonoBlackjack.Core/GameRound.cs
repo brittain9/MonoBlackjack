@@ -58,6 +58,14 @@ public class GameRound
         if (Phase != RoundPhase.Dealing)
             throw new InvalidOperationException($"Cannot deal in phase {Phase}");
 
+        int cardsRemainingBeforeDeal = _shoe.Remaining;
+        int cutCardThreshold = _shoe.CutCardRemainingThreshold;
+        if (_shoe.ReshuffleIfCutCardReached())
+        {
+            _publish(new ShoeCutCardReached(cardsRemainingBeforeDeal, cutCardThreshold));
+            _publish(new ShoeReshuffled(_shoe.DeckCount, _shoe.Remaining, _shoe.CutCardRemainingThreshold));
+        }
+
         _player.ClearHands();
         _dealer.ClearHand();
         _player.CreateHand();

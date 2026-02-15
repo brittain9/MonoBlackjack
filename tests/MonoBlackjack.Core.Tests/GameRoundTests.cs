@@ -43,6 +43,63 @@ public class GameRoundTests
     }
 
     [Fact]
+    public void Deal_WhenCutCardReached_ReshufflesAndPublishesShoeEvents()
+    {
+        var originalPenetration = GameConfig.PenetrationPercent;
+        try
+        {
+            GameConfig.PenetrationPercent = 75;
+
+            var shoe = new Shoe(1, new Random(42));
+            while (shoe.Remaining > shoe.CutCardRemainingThreshold)
+                shoe.Draw();
+
+            var player = new Human();
+            var dealer = new Dealer();
+            var round = new GameRound(shoe, player, dealer, e => _events.Add(e));
+
+            round.PlaceBet(GameConfig.MinimumBet);
+            round.Deal();
+
+            var cutCardReached = _events.OfType<ShoeCutCardReached>().Single();
+            cutCardReached.CardsRemaining.Should().Be(13);
+            cutCardReached.CutCardRemainingThreshold.Should().Be(13);
+
+            var reshuffled = _events.OfType<ShoeReshuffled>().Single();
+            reshuffled.DeckCount.Should().Be(1);
+            reshuffled.CardsRemaining.Should().Be(52);
+            reshuffled.CutCardRemainingThreshold.Should().Be(13);
+
+            shoe.Remaining.Should().Be(48);
+        }
+        finally
+        {
+            GameConfig.PenetrationPercent = originalPenetration;
+        }
+    }
+
+    [Fact]
+    public void Deal_WhenCutCardNotReached_DoesNotPublishShoeEvents()
+    {
+        var originalPenetration = GameConfig.PenetrationPercent;
+        try
+        {
+            GameConfig.PenetrationPercent = 75;
+            var round = CreateRound(seed: 123);
+
+            round.PlaceBet(GameConfig.MinimumBet);
+            round.Deal();
+
+            _events.Should().NotContain(e => e is ShoeCutCardReached);
+            _events.Should().NotContain(e => e is ShoeReshuffled);
+        }
+        finally
+        {
+            GameConfig.PenetrationPercent = originalPenetration;
+        }
+    }
+
+    [Fact]
     public void Deal_WithNoBlackjack_TransitionsToPlayerTurnOrInsurance()
     {
         var round = CreateRound();

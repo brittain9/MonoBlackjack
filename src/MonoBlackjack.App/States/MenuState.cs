@@ -45,7 +45,12 @@ internal class MenuState : State
         };
         playButton.Click += (s, e) => 
         { 
-            _game.ChangeState(new GameState(_game, _graphicsDevice, content)); 
+            _game.ChangeState(new GameState(
+                _game,
+                _graphicsDevice,
+                content,
+                _game.StatsRepository,
+                _game.ActiveProfileId)); 
         };
 
         // This button is below the n

@@ -26,6 +26,10 @@ public record InsuranceResult(string PlayerName, bool DealerHadBlackjack, decima
 // Dealer peek
 public record DealerPeeked(bool HasBlackjack) : GameEvent;
 
+// Shoe lifecycle
+public record ShoeCutCardReached(int CardsRemaining, int CutCardRemainingThreshold) : GameEvent;
+public record ShoeReshuffled(int DeckCount, int CardsRemaining, int CutCardRemainingThreshold) : GameEvent;
+
 // Player turn
 public record PlayerTurnStarted(string PlayerName, int HandIndex = 0) : GameEvent;
 public record PlayerHit(string PlayerName, Card Card, int HandIndex) : GameEvent;

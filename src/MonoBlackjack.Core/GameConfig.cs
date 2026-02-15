@@ -28,6 +28,12 @@ public static class GameConfig
     public static int NumberOfDecks = 6;
 
     /// <summary>
+    /// Percentage of the shoe dealt before reshuffling between rounds.
+    /// 75 means reshuffle when 25% of cards remain.
+    /// </summary>
+    public static int PenetrationPercent = 75;
+
+    /// <summary>
     /// Use cryptographic RNG for casino-grade shuffling (production).
     /// False = deterministic Random for testing/reproducibility (development).
     /// </summary>

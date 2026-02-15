@@ -4,9 +4,11 @@ using Microsoft.Xna.Framework.Graphics;
 using MonoBlackjack.Animation;
 using MonoBlackjack.Core;
 using MonoBlackjack.Core.Events;
+using MonoBlackjack.Core.Ports;
 using MonoBlackjack.Core.Players;
 using MonoBlackjack.Events;
 using MonoBlackjack.Rendering;
+using MonoBlackjack.Stats;
 
 namespace MonoBlackjack;
 
@@ -48,7 +50,12 @@ internal class GameState : State
     private Vector2 _deckPosition;
     private Vector2 _cardSize;
 
-    public GameState(BlackjackGame game, GraphicsDevice graphicsDevice, ContentManager content)
+    public GameState(
+        BlackjackGame game,
+        GraphicsDevice graphicsDevice,
+        ContentManager content,
+        IStatsRepository statsRepository,
+        int profileId)
         : base(game, graphicsDevice, content)
     {
         _cardRenderer = new CardRenderer();
@@ -61,6 +68,7 @@ internal class GameState : State
         _eventBus = new EventBus();
         _tweenManager = new TweenManager();
         _sceneRenderer = new SceneRenderer();
+        _ = new StatsRecorder(_eventBus, statsRepository, profileId);
 
         _cardLayer = new SpriteLayer(10);
         _uiLayer = new SpriteLayer(20);

@@ -16,6 +16,9 @@ public class Shoe
 
     public int Remaining => _cards.Count;
     public int DeckCount => _deckCount;
+    public int TotalCards => _deckCount * 52;
+    public int CutCardRemainingThreshold => ComputeCutCardRemainingThreshold(TotalCards, GameConfig.PenetrationPercent);
+    public bool IsCutCardReached => Remaining <= CutCardRemainingThreshold;
 
     public Shoe(int deckCount, Random? rng = null)
     {
@@ -69,6 +72,18 @@ public class Shoe
     }
 
     /// <summary>
+    /// Reshuffle at the start of a round if the cut card has been reached.
+    /// </summary>
+    public bool ReshuffleIfCutCardReached()
+    {
+        if (!IsCutCardReached)
+            return false;
+
+        Reset();
+        return true;
+    }
+
+    /// <summary>
     /// Get random integer in range [0, maxValue).
     /// Uses cryptographic RNG if enabled, otherwise deterministic Random.
     /// </summary>
@@ -93,5 +108,12 @@ public class Shoe
             }
         }
         return cards;
+    }
+
+    private static int ComputeCutCardRemainingThreshold(int totalCards, int penetrationPercent)
+    {
+        int clampedPenetration = Math.Clamp(penetrationPercent, 1, 100);
+        decimal remainingFraction = (100 - clampedPenetration) / 100m;
+        return (int)Math.Ceiling(totalCards * remainingFraction);
     }
 }
