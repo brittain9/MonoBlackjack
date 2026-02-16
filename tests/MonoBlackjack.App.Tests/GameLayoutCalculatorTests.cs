@@ -150,4 +150,68 @@ public class GameLayoutCalculatorTests
         Assert.True(maxRight <= viewportWidth * 0.95f + 0.001f);
         Assert.True(allX.SequenceEqual(allX.OrderBy(x => x)));
     }
+
+    [Theory]
+    [InlineData(800, 600)]
+    [InlineData(1280, 720)]
+    [InlineData(1920, 1080)]
+    public void ComputeRowCardCenter_ForDealerAndSinglePlayer_CentersRowsAtViewportCenter(int viewportWidth, int viewportHeight)
+    {
+        var cardSize = GameLayoutCalculator.CalculateCardSize(viewportHeight);
+        var centerY = GameLayoutCalculator.CalculateDealerCardsY(viewportHeight) + cardSize.Y / 2f;
+        var expectedCenterX = viewportWidth / 2f;
+
+        for (int cardCount = 2; cardCount <= 10; cardCount++)
+        {
+            var first = GameLayoutCalculator.ComputeRowCardCenter(viewportWidth, cardSize, cardCount, 0, centerY);
+            var last = GameLayoutCalculator.ComputeRowCardCenter(viewportWidth, cardSize, cardCount, cardCount - 1, centerY);
+            var rowCenter = (first.X + last.X) / 2f;
+
+            Assert.InRange(rowCenter, expectedCenterX - 0.001f, expectedCenterX + 0.001f);
+        }
+    }
+
+    [Theory]
+    [InlineData(800, 600)]
+    [InlineData(1280, 720)]
+    [InlineData(1920, 1080)]
+    public void ComputeMultiHandCardCenter_ForOneToFourHands_AndTwoToTenCards_PerHand_StaysCenteredAndInBounds(int viewportWidth, int viewportHeight)
+    {
+        var cardSize = GameLayoutCalculator.CalculateCardSize(viewportHeight);
+        var centerY = GameLayoutCalculator.CalculatePlayerCardsY(viewportHeight) + cardSize.Y / 2f;
+        var expectedCenterX = viewportWidth / 2f;
+
+        for (int handCount = 1; handCount <= 4; handCount++)
+        {
+            for (int cardsPerHand = 2; cardsPerHand <= 10; cardsPerHand++)
+            {
+                var counts = Enumerable.Repeat(cardsPerHand, handCount).ToArray();
+
+                float minLeft = float.MaxValue;
+                float maxRight = float.MinValue;
+
+                for (int hand = 0; hand < handCount; hand++)
+                {
+                    for (int card = 0; card < cardsPerHand; card++)
+                    {
+                        var center = GameLayoutCalculator.ComputeMultiHandCardCenter(
+                            viewportWidth,
+                            cardSize,
+                            counts,
+                            hand,
+                            card,
+                            centerY);
+
+                        minLeft = Math.Min(minLeft, center.X - cardSize.X / 2f);
+                        maxRight = Math.Max(maxRight, center.X + cardSize.X / 2f);
+                    }
+                }
+
+                var rowCenter = (minLeft + maxRight) / 2f;
+                Assert.InRange(rowCenter, expectedCenterX - 0.001f, expectedCenterX + 0.001f);
+                Assert.True(minLeft >= viewportWidth * 0.05f - 0.001f);
+                Assert.True(maxRight <= viewportWidth * 0.95f + 0.001f);
+            }
+        }
+    }
 }

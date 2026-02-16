@@ -9,10 +9,14 @@ namespace MonoBlackjack;
 
 public class BlackjackGame : Microsoft.Xna.Framework.Game
 {
+    private const int MaxStateHistory = 5;
     private readonly GraphicsDeviceManager _graphics;
+    private readonly List<State> _stateHistory = [];
     private SpriteBatch _spriteBatch = null!;
     private State _currentState = null!;
     private State? _nextState;
+    private bool _clearHistoryOnTransition;
+    private bool _pushCurrentStateToHistoryOnTransition;
     private DatabaseManager _database = null!;
     private IProfileRepository _profileRepository = null!;
     private IStatsRepository _statsRepository = null!;
@@ -20,7 +24,25 @@ public class BlackjackGame : Microsoft.Xna.Framework.Game
     private Texture2D _pixelTexture = null!;
     private bool _enforcingMinimumWindowSize;
 
-    public void ChangeState(State state) => _nextState = state;
+    public void ChangeState(State state, bool pushHistory = true, bool clearHistory = false)
+    {
+        QueueTransition(state, pushHistory, clearHistory);
+    }
+
+    public void GoBack()
+    {
+        if (_stateHistory.Count > 0)
+        {
+            int lastIndex = _stateHistory.Count - 1;
+            var previousState = _stateHistory[lastIndex];
+            _stateHistory.RemoveAt(lastIndex);
+            QueueTransition(previousState, pushHistory: false, clearHistory: false);
+            return;
+        }
+
+        QueueTransition(new MenuState(this, _graphics.GraphicsDevice, Content), pushHistory: false, clearHistory: true);
+    }
+
     public IStatsRepository StatsRepository => _statsRepository;
     public ISettingsRepository SettingsRepository => _settingsRepository;
     public Texture2D PixelTexture => _pixelTexture;
@@ -104,9 +126,20 @@ public class BlackjackGame : Microsoft.Xna.Framework.Game
     {
         if (_nextState != null)
         {
-            _currentState.Dispose();
+            if (_clearHistoryOnTransition)
+                ClearStateHistory();
+
+            if (_pushCurrentStateToHistoryOnTransition)
+                PushStateHistory(_currentState);
+            else
+                _currentState.Dispose();
+
             _currentState = _nextState;
             _nextState = null;
+            _pushCurrentStateToHistoryOnTransition = false;
+            _clearHistoryOnTransition = false;
+
+            _currentState.HandleResize(Window.ClientBounds);
         }
 
         _currentState.Update(gameTime);
@@ -119,6 +152,50 @@ public class BlackjackGame : Microsoft.Xna.Framework.Game
         GraphicsDevice.Clear(Color.DarkGreen);
         _currentState.Draw(gameTime, _spriteBatch);
         base.Draw(gameTime);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _nextState?.Dispose();
+            _nextState = null;
+
+            if (_currentState is not null)
+                _currentState.Dispose();
+
+            ClearStateHistory();
+        }
+
+        base.Dispose(disposing);
+    }
+
+    private void QueueTransition(State state, bool pushHistory, bool clearHistory)
+    {
+        if (_nextState is not null && !ReferenceEquals(_nextState, state))
+            _nextState.Dispose();
+
+        _nextState = state;
+        _pushCurrentStateToHistoryOnTransition = pushHistory;
+        _clearHistoryOnTransition = clearHistory;
+    }
+
+    private void PushStateHistory(State state)
+    {
+        _stateHistory.Add(state);
+
+        if (_stateHistory.Count <= MaxStateHistory)
+            return;
+
+        _stateHistory[0].Dispose();
+        _stateHistory.RemoveAt(0);
+    }
+
+    private void ClearStateHistory()
+    {
+        foreach (var state in _stateHistory)
+            state.Dispose();
+        _stateHistory.Clear();
     }
 }
 

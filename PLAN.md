@@ -17,136 +17,14 @@ MonoBlackjack is a casino-grade blackjack simulator with strong domain modeling 
 ---
 
 ## Phase 1: Critical Architecture Fixes (Foundation)
-**Priority:** P0 - MUST DO FIRST
-**Estimated Effort:** 5-7 hours
-**Dependencies:** None - these are foundational
-
 ### 1.1 Refactor GameConfig → Immutable GameRules Record (COMPLETE)
-
 ### 1.2 Standardize Coordinate System to Center-Anchor (COMPLETE)
-
 ### 1.3 Add Input Validation Layer (COMPLETE)
 
 ## Phase 2: UI/UX Core Fixes (Visual Quality)
-**Priority:** P1 - High Impact
-**Estimated Effort:** 6-8 hours
-**Dependencies:** Phase 1.2 (coordinate standardization)
-
-### 2.1 Improve Window Resizing and Font Scaling
-**Problem:** Fonts don't scale responsively (static asset with runtime scale factor), text becomes unreadable on small windows.
-
-**Files Affected:**
-- All States: `GameState.cs`, `MenuState.cs`, `SettingsState.cs`, `StatsState.cs`
-- `src/MonoBlackjack.App/Controls/Button.cs`
-
-**Approach:**
-1. Add min/max scale clamping to all text rendering:
-   ```csharp
-   var scale = Math.Clamp(calculatedScale, 0.5f, 2.0f);
-   ```
-2. Extract font scaling logic to helper method in `State` base class:
-   ```csharp
-   protected float GetResponsiveScale(float baseScale)
-   {
-       var vp = _graphicsDevice.Viewport;
-       var scaleFactor = Math.Min(vp.Width / 1280f, vp.Height / 720f); // Assume 720p baseline
-       return Math.Clamp(baseScale * scaleFactor, 0.5f, 2.0f);
-   }
-   ```
-3. Cache `MeasureString` results in Button class (recalculate only on text/size change)
-4. Add minimum window size enforcement in `BlackjackGame.cs`:
-   ```csharp
-   _graphics.PreferredBackBufferWidth = Math.Max(Window.ClientBounds.Width, 800);
-   _graphics.PreferredBackBufferHeight = Math.Max(Window.ClientBounds.Height, 600);
-   ```
-
-**Benefits:**
-- Text remains readable at all window sizes
-- Better performance (cached measurements)
-- Professional appearance
-
-**Verification:**
-- Test at 800x600, 1920x1080, 3840x2160 resolutions
-- All text remains legible
-- No performance drops during resize
-
----
-
-### 2.2 Fix Button Layout and Spacing
-**Problem:** Hard-coded padding (12f) and magic multipliers (`buttonSize.Y * 1.5f`, `buttonSize.Y * 2.8f`) don't scale with viewport.
-
-**Files Affected:**
-- `src/MonoBlackjack.App/States/GameState.cs` (lines 198-267)
-
-**Approach:**
-1. Replace hard-coded `buttonPadding = 12f` with viewport-relative:
-   ```csharp
-   var buttonPadding = vp.Width * 0.01f; // 1% of viewport width
-   ```
-2. Replace magic multipliers with named constants:
-   ```csharp
-   private const float DealButtonVerticalOffset = 0.08f; // % of viewport height
-   private const float RepeatBetButtonOffset = 0.14f;
-   ```
-3. Create `UIConstants.cs` file for all layout constants:
-   ```csharp
-   public static class UIConstants
-   {
-       public const int CardWidth = 100;
-       public const int CardHeight = 145;
-       public static readonly Vector2 CardSize = new(CardWidth, CardHeight);
-       public const float CardAspectRatio = CardWidth / (float)CardHeight;
-
-       public const float ButtonPaddingRatio = 0.01f;
-       public const float DealButtonOffsetRatio = 0.08f;
-       public const float RepeatBetOffsetRatio = 0.14f;
-   }
-   ```
-4. Update all button positioning to use named constants
-
-**Benefits:**
-- Consistent spacing at all resolutions
-- Self-documenting code (named constants explain intent)
-- Easy to tweak layout globally
-
-**Verification:**
-- Visual inspection at multiple resolutions
-- Button spacing looks uniform
-- No overlapping buttons
-
----
-
-### 2.3 Fix Card Positioning Alignment
-**Problem:** Player cards don't align with dealer cards; hard-coded overlap ratios (0.45f, 1.8f) may not scale well.
-
-**Files Affected:**
-- `src/MonoBlackjack.App/States/GameState.cs` (lines 289-371)
-
-**Approach:**
-1. Standardize vertical positioning to use consistent baseline:
-   ```csharp
-   private float GetDealerCardsY() => _graphicsDevice.Viewport.Height * 0.18f;  // Higher up
-   private float GetPlayerCardsY() => _graphicsDevice.Viewport.Height * 0.52f; // Lower down, more spacing
-   ```
-2. Make overlap/gap ratios viewport-aware:
-   ```csharp
-   var cardOverlap = _cardSize.X * 0.4f;  // Reduced from 0.45f
-   var handGap = Math.Max(_cardSize.X * 1.5f, vp.Width * 0.05f); // Minimum 5% of screen width
-   ```
-3. Add visual alignment guides (debug mode) to verify centering
-4. Test with 1, 2, 3, 4 hands and 2-10 cards per hand
-
-**Benefits:**
-- Consistent visual alignment
-- Better use of screen space
-- Handles edge cases (many cards/hands)
-
-**Verification:**
-- Play through game with splits (2-4 hands)
-- Verify cards don't overlap excessively
-- Dealer and player cards visually balanced
-
----
+### 2.1 Improve Window Resizing and Font Scaling (COMPLETE)
+### 2.2 Fix Button Layout and Spacing (COMPLETE)
+### 2.3 Fix Card Positioning Alignment (COMPLETE)
 
 ## Phase 3: Navigation & State Management (UX Flow)
 **Priority:** P1 - User Requested

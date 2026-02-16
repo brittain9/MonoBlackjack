@@ -336,7 +336,7 @@ internal sealed class SettingsState : State
 
     private void OnBackClicked(object? sender, EventArgs e)
     {
-        _game.ChangeState(new MenuState(_game, _graphicsDevice, _content));
+        _game.GoBack();
     }
 
     private sealed record SettingChoice(string Label, string Value);

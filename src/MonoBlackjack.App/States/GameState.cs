@@ -10,6 +10,7 @@ using MonoBlackjack.Events;
 using MonoBlackjack.Layout;
 using MonoBlackjack.Rendering;
 using MonoBlackjack.Stats;
+using Microsoft.Xna.Framework.Input;
 
 namespace MonoBlackjack;
 
@@ -46,11 +47,19 @@ internal class GameState : State
     // Bankrupt phase buttons
     private readonly Button _resetBankrollButton;
     private readonly Button _menuButton;
+    private readonly Button _pauseResumeButton;
+    private readonly Button _pauseSettingsButton;
+    private readonly Button _pauseQuitButton;
+    private readonly Button _pauseConfirmQuitButton;
+    private readonly Button _pauseCancelQuitButton;
     private readonly StatsRecorder _statsRecorder;
     private readonly List<IDisposable> _subscriptions = [];
 
     private readonly List<TrackedCardSprite> _trackedCards = [];
     private readonly HashSet<int> _bustedHands = new();
+    private bool _isPaused;
+    private bool _isQuitConfirmationVisible;
+    private bool _showAlignmentGuides;
 
     private enum GamePhase { Betting, Playing, Bankrupt }
     private GamePhase _gamePhase;
@@ -150,6 +159,13 @@ internal class GameState : State
         _resetBankrollButton = new Button(buttonTexture, _font) { Text = "Reset", PenColor = Color.Black };
         _menuButton = new Button(buttonTexture, _font) { Text = "Menu", PenColor = Color.Black };
 
+        // Pause menu buttons
+        _pauseResumeButton = new Button(buttonTexture, _font) { Text = "Resume", PenColor = Color.Black };
+        _pauseSettingsButton = new Button(buttonTexture, _font) { Text = "Settings", PenColor = Color.Black };
+        _pauseQuitButton = new Button(buttonTexture, _font) { Text = "Quit to Menu", PenColor = Color.Black };
+        _pauseConfirmQuitButton = new Button(buttonTexture, _font) { Text = "Quit", PenColor = Color.Black };
+        _pauseCancelQuitButton = new Button(buttonTexture, _font) { Text = "Cancel", PenColor = Color.Black };
+
         _hitButton.Click += OnHitClicked;
         _standButton.Click += OnStandClicked;
         _splitButton.Click += OnSplitClicked;
@@ -163,6 +179,11 @@ internal class GameState : State
         _repeatBetButton.Click += OnRepeatBetClicked;
         _resetBankrollButton.Click += OnResetBankrollClicked;
         _menuButton.Click += OnMenuClicked;
+        _pauseResumeButton.Click += OnPauseResumeClicked;
+        _pauseSettingsButton.Click += OnPauseSettingsClicked;
+        _pauseQuitButton.Click += OnPauseQuitClicked;
+        _pauseConfirmQuitButton.Click += OnPauseConfirmQuitClicked;
+        _pauseCancelQuitButton.Click += OnPauseCancelQuitClicked;
 
         _subscriptions.Add(_eventBus.Subscribe<CardDealt>(OnCardDealt));
         _subscriptions.Add(_eventBus.Subscribe<InitialDealComplete>(OnInitialDealComplete));
@@ -240,9 +261,11 @@ internal class GameState : State
         _declineInsuranceButton.Position = new Vector2(insuranceStartX + _actionButtonSize.X + _actionButtonPadding, _actionButtonY);
 
         // Betting phase layout
-        var arrowSize = new Vector2(_actionButtonSize.Y * 1.2f, _actionButtonSize.Y);
-        var betCenterY = vp.Height * 0.5f;
-        var betArrowSpacing = _actionButtonSize.X * 0.8f;
+        var arrowSize = new Vector2(
+            _actionButtonSize.Y * UIConstants.BetArrowWidthToActionButtonHeightRatio,
+            _actionButtonSize.Y);
+        var betCenterY = vp.Height * UIConstants.BetCenterYRatio;
+        var betArrowSpacing = _actionButtonSize.X * UIConstants.BetArrowSpacingToActionButtonWidthRatio;
         _betDownButton.Size = arrowSize;
         _betUpButton.Size = arrowSize;
         _betDownButton.Position = new Vector2(centerX - betArrowSpacing, betCenterY);
@@ -257,11 +280,30 @@ internal class GameState : State
         // Bankrupt phase layout - two buttons centered
         _resetBankrollButton.Size = _actionButtonSize;
         _menuButton.Size = _actionButtonSize;
-        var bankruptY = vp.Height * 0.55f;
+        var bankruptY = vp.Height * UIConstants.BankruptButtonsYRatio;
         var bankruptTotalWidth = (_actionButtonSize.X * 2) + _actionButtonPadding;
         var bankruptStartX = centerX - (bankruptTotalWidth / 2f) + (_actionButtonSize.X / 2f);
         _resetBankrollButton.Position = new Vector2(bankruptStartX, bankruptY);
         _menuButton.Position = new Vector2(bankruptStartX + _actionButtonSize.X + _actionButtonPadding, bankruptY);
+
+        // Pause menu layout
+        _pauseResumeButton.Size = _actionButtonSize;
+        _pauseSettingsButton.Size = _actionButtonSize;
+        _pauseQuitButton.Size = _actionButtonSize;
+        _pauseConfirmQuitButton.Size = _actionButtonSize;
+        _pauseCancelQuitButton.Size = _actionButtonSize;
+
+        float pauseStartY = vp.Height * 0.43f;
+        float pauseSpacing = _actionButtonSize.Y * 1.2f;
+        _pauseResumeButton.Position = new Vector2(centerX, pauseStartY);
+        _pauseSettingsButton.Position = new Vector2(centerX, pauseStartY + pauseSpacing);
+        _pauseQuitButton.Position = new Vector2(centerX, pauseStartY + pauseSpacing * 2f);
+
+        float confirmY = pauseStartY + pauseSpacing * 1.5f;
+        float confirmTotalWidth = (_actionButtonSize.X * 2) + _actionButtonPadding;
+        float confirmStartX = centerX - (confirmTotalWidth / 2f) + (_actionButtonSize.X / 2f);
+        _pauseConfirmQuitButton.Position = new Vector2(confirmStartX, confirmY);
+        _pauseCancelQuitButton.Position = new Vector2(confirmStartX + _actionButtonSize.X + _actionButtonPadding, confirmY);
     }
 
     private void LayoutActionButtons()
@@ -733,7 +775,50 @@ internal class GameState : State
 
     private void OnMenuClicked(object? sender, EventArgs e)
     {
-        _game.ChangeState(new MenuState(_game, _graphicsDevice, _content));
+        QuitToMenu();
+    }
+
+    private void OnPauseResumeClicked(object? sender, EventArgs e)
+    {
+        _isPaused = false;
+        _isQuitConfirmationVisible = false;
+    }
+
+    private void OnPauseSettingsClicked(object? sender, EventArgs e)
+    {
+        if (!_isPaused)
+            return;
+
+        _isQuitConfirmationVisible = false;
+        _game.ChangeState(new SettingsState(_game, _graphicsDevice, _content, _game.SettingsRepository, _game.ActiveProfileId));
+    }
+
+    private void OnPauseQuitClicked(object? sender, EventArgs e)
+    {
+        if (!_isPaused)
+            return;
+
+        _isQuitConfirmationVisible = true;
+    }
+
+    private void OnPauseConfirmQuitClicked(object? sender, EventArgs e)
+    {
+        QuitToMenu();
+    }
+
+    private void OnPauseCancelQuitClicked(object? sender, EventArgs e)
+    {
+        _isQuitConfirmationVisible = false;
+    }
+
+    private void QuitToMenu()
+    {
+        _isPaused = false;
+        _isQuitConfirmationVisible = false;
+        _game.ChangeState(
+            new MenuState(_game, _graphicsDevice, _content),
+            pushHistory: false,
+            clearHistory: true);
     }
 
     private void OnHitClicked(object? sender, EventArgs e)
@@ -807,8 +892,46 @@ internal class GameState : State
         _eventBus.Flush();
     }
 
+    private void UpdatePauseMenu(GameTime gameTime)
+    {
+        if (_isQuitConfirmationVisible)
+        {
+            _pauseConfirmQuitButton.Update(gameTime);
+            _pauseCancelQuitButton.Update(gameTime);
+            return;
+        }
+
+        _pauseResumeButton.Update(gameTime);
+        _pauseSettingsButton.Update(gameTime);
+        _pauseQuitButton.Update(gameTime);
+    }
+
     public override void Update(GameTime gameTime)
     {
+        CaptureKeyboardState();
+
+        if (WasKeyJustPressed(Keys.F3))
+            _showAlignmentGuides = !_showAlignmentGuides;
+
+        if (WasKeyJustPressed(Keys.Escape))
+        {
+            if (_isQuitConfirmationVisible)
+            {
+                _isQuitConfirmationVisible = false;
+            }
+            else
+            {
+                _isPaused = !_isPaused;
+            }
+        }
+
+        if (_isPaused)
+        {
+            UpdatePauseMenu(gameTime);
+            CommitKeyboardState();
+            return;
+        }
+
         if (_gamePhase == GamePhase.Betting)
         {
             _betDownButton.Update(gameTime);
@@ -816,6 +939,7 @@ internal class GameState : State
             _dealButton.Update(gameTime);
             if (_lastBet > 0)
                 _repeatBetButton.Update(gameTime);
+            CommitKeyboardState();
             return;
         }
 
@@ -823,6 +947,7 @@ internal class GameState : State
         {
             _resetBankrollButton.Update(gameTime);
             _menuButton.Update(gameTime);
+            CommitKeyboardState();
             return;
         }
 
@@ -851,6 +976,7 @@ internal class GameState : State
         }
 
         _sceneRenderer.Update(gameTime);
+        CommitKeyboardState();
     }
 
     public override void Draw(GameTime gameTime, SpriteBatch spriteBatch)
@@ -883,6 +1009,9 @@ internal class GameState : State
             if (_lastBet > 0)
                 _repeatBetButton.Draw(gameTime, spriteBatch);
 
+            if (_isPaused)
+                DrawPauseOverlay(gameTime, spriteBatch);
+
             spriteBatch.End();
             return;
         }
@@ -900,6 +1029,9 @@ internal class GameState : State
             _resetBankrollButton.Draw(gameTime, spriteBatch);
             _menuButton.Draw(gameTime, spriteBatch);
 
+            if (_isPaused)
+                DrawPauseOverlay(gameTime, spriteBatch);
+
             spriteBatch.End();
             return;
         }
@@ -907,7 +1039,14 @@ internal class GameState : State
         // Playing phase
         _sceneRenderer.Draw(spriteBatch);
 
-        if (IsPlayerInteractionEnabled())
+        if (_showAlignmentGuides)
+        {
+            spriteBatch.Begin();
+            DrawAlignmentGuides(spriteBatch);
+            spriteBatch.End();
+        }
+
+        if (!_isPaused && IsPlayerInteractionEnabled())
         {
             LayoutActionButtons();
             spriteBatch.Begin();
@@ -922,7 +1061,7 @@ internal class GameState : State
 
             spriteBatch.End();
         }
-        else if (IsInsuranceInteractionEnabled())
+        else if (!_isPaused && IsInsuranceInteractionEnabled())
         {
             spriteBatch.Begin();
             if (isBettingMode) DrawHud(spriteBatch, vp);
@@ -939,6 +1078,94 @@ internal class GameState : State
             DrawHandValues(spriteBatch);
             spriteBatch.End();
         }
+
+        if (_isPaused)
+        {
+            spriteBatch.Begin();
+            DrawPauseOverlay(gameTime, spriteBatch);
+            spriteBatch.End();
+        }
+    }
+
+    private void DrawPauseOverlay(GameTime gameTime, SpriteBatch spriteBatch)
+    {
+        var vp = _graphicsDevice.Viewport;
+        spriteBatch.Draw(_pixelTexture, new Rectangle(0, 0, vp.Width, vp.Height), new Color(0, 0, 0, 180));
+
+        string title = _isQuitConfirmationVisible ? "Quit to Menu?" : "Paused";
+        float titleScale = GetResponsiveScale(1.1f);
+        var titleSize = _font.MeasureString(title) * titleScale;
+        var titlePos = new Vector2(vp.Width / 2f - titleSize.X / 2f, vp.Height * 0.28f);
+        spriteBatch.DrawString(_font, title, titlePos, Color.White, 0f, Vector2.Zero, titleScale, SpriteEffects.None, 0f);
+
+        if (_isQuitConfirmationVisible)
+        {
+            const string warning = "Current round progress will be lost.";
+            float warningScale = GetResponsiveScale(0.6f);
+            var warningSize = _font.MeasureString(warning) * warningScale;
+            var warningPos = new Vector2(vp.Width / 2f - warningSize.X / 2f, titlePos.Y + titleSize.Y + 14f);
+            spriteBatch.DrawString(_font, warning, warningPos, Color.LightGray, 0f, Vector2.Zero, warningScale, SpriteEffects.None, 0f);
+
+            _pauseConfirmQuitButton.Draw(gameTime, spriteBatch);
+            _pauseCancelQuitButton.Draw(gameTime, spriteBatch);
+            return;
+        }
+
+        _pauseResumeButton.Draw(gameTime, spriteBatch);
+        _pauseSettingsButton.Draw(gameTime, spriteBatch);
+        _pauseQuitButton.Draw(gameTime, spriteBatch);
+    }
+
+    private void DrawAlignmentGuides(SpriteBatch spriteBatch)
+    {
+        var vp = _graphicsDevice.Viewport;
+        var centerX = vp.Width / 2f;
+        var dealerTop = GetDealerCardsY();
+        var dealerBottom = dealerTop + _cardSize.Y;
+        var playerTop = GetPlayerCardsY();
+        var playerBottom = playerTop + _cardSize.Y;
+
+        var axisColor = new Color(120, 255, 255, 170);
+        var boundsColor = new Color(255, 235, 120, 120);
+        var handCenterColor = new Color(255, 120, 220, 200);
+
+        // View center axis + row boundaries.
+        spriteBatch.Draw(_pixelTexture, new Rectangle((int)centerX, 0, 1, vp.Height), axisColor);
+        spriteBatch.Draw(_pixelTexture, new Rectangle(0, (int)dealerTop, vp.Width, 1), boundsColor);
+        spriteBatch.Draw(_pixelTexture, new Rectangle(0, (int)dealerBottom, vp.Width, 1), boundsColor);
+        spriteBatch.Draw(_pixelTexture, new Rectangle(0, (int)playerTop, vp.Width, 1), boundsColor);
+        spriteBatch.Draw(_pixelTexture, new Rectangle(0, (int)playerBottom, vp.Width, 1), boundsColor);
+
+        // Dealer hand center marker.
+        int dealerCount = Math.Max(_dealerCardCount, 2);
+        var dealerFirst = GetCardTargetPosition(_dealer.Name, 0, 0);
+        var dealerLast = GetCardTargetPosition(_dealer.Name, 0, dealerCount - 1);
+        var dealerCenter = (dealerFirst.X + dealerLast.X) / 2f;
+        spriteBatch.Draw(_pixelTexture, new Rectangle((int)dealerCenter, (int)dealerTop - 8, 1, 16), handCenterColor);
+
+        // Player hand center markers.
+        int handCount = GetPlayerHandCount();
+        for (int h = 0; h < handCount; h++)
+        {
+            int cardCount = GetPlayerCardCount(h);
+            var first = GetCardTargetPosition(_player.Name, h, 0);
+            var last = GetCardTargetPosition(_player.Name, h, cardCount - 1);
+            var handCenter = (first.X + last.X) / 2f;
+            spriteBatch.Draw(_pixelTexture, new Rectangle((int)handCenter, (int)playerTop - 8, 1, 16), handCenterColor);
+        }
+
+        var debugTextScale = GetResponsiveScale(0.55f);
+        var debugText = "Alignment Guides (F3)";
+        spriteBatch.DrawString(
+            _font,
+            debugText,
+            new Vector2(8f, vp.Height - _font.MeasureString(debugText).Y * debugTextScale - 8f),
+            new Color(220, 255, 220),
+            0f,
+            Vector2.Zero,
+            debugTextScale,
+            SpriteEffects.None,
+            0f);
     }
 
     private void DrawHud(SpriteBatch spriteBatch, Viewport vp)

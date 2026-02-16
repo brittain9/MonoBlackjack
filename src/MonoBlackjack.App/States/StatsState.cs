@@ -80,7 +80,7 @@ internal sealed class StatsState : State
         _matrixPairsButton.Click += (_, _) => { _matrixMode = MatrixMode.Pairs; LoadStrategyMatrix(); };
 
         _backButton = new Button(_buttonTexture, _font) { Text = "Back", PenColor = Color.Black };
-        _backButton.Click += (_, _) => _game.ChangeState(new MenuState(_game, _graphicsDevice, _content));
+        _backButton.Click += (_, _) => _game.GoBack();
 
         _buttons.AddRange([_overviewTab, _analysisTab, _matrixHardButton, _matrixSoftButton, _matrixPairsButton, _backButton]);
 

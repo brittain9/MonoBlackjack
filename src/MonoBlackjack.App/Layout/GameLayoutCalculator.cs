@@ -16,7 +16,7 @@ public static class GameLayoutCalculator
     public const float MultiHandGapRatio = 1.2f;
     public const float MinMultiHandGapViewportRatio = 0.05f;
     public const float ActionButtonPaddingRatio = UIConstants.ButtonPaddingRatio;
-    public const int MaxActionButtons = 5;
+    public const int MaxActionButtons = UIConstants.MaxActionButtons;
 
     public static Vector2 CalculateCardSize(int viewportHeight)
     {
@@ -37,15 +37,24 @@ public static class GameLayoutCalculator
 
     public static float CalculateActionButtonPadding(int viewportWidth)
     {
-        return Math.Clamp(viewportWidth * ActionButtonPaddingRatio, 10f, 20f);
+        return Math.Clamp(
+            viewportWidth * ActionButtonPaddingRatio,
+            UIConstants.MinButtonPadding,
+            UIConstants.MaxButtonPadding);
     }
 
     public static Vector2 CalculateActionButtonSize(int viewportWidth, Vector2 cardSize, float actionButtonPadding)
     {
-        var availableWidth = viewportWidth * 0.92f;
+        var availableWidth = viewportWidth * UIConstants.ActionButtonsViewportWidthRatio;
         var maxButtonWidth = (availableWidth - (actionButtonPadding * (MaxActionButtons - 1))) / MaxActionButtons;
-        var buttonWidth = Math.Clamp(Math.Min(cardSize.X * 1.2f, maxButtonWidth), 90f, 220f);
-        var buttonHeight = Math.Clamp(cardSize.Y * 0.35f, 34f, 74f);
+        var buttonWidth = Math.Clamp(
+            Math.Min(cardSize.X * UIConstants.ActionButtonWidthToCardRatio, maxButtonWidth),
+            UIConstants.MinActionButtonWidth,
+            UIConstants.MaxActionButtonWidth);
+        var buttonHeight = Math.Clamp(
+            cardSize.Y * UIConstants.ActionButtonHeightToCardRatio,
+            UIConstants.MinActionButtonHeight,
+            UIConstants.MaxActionButtonHeight);
         return new Vector2(buttonWidth, buttonHeight);
     }
 
@@ -56,12 +65,15 @@ public static class GameLayoutCalculator
         Vector2 actionButtonSize,
         float handValueTextHeight)
     {
-        const float handValueTopPadding = 8f;
+        const float handValueTopPadding = UIConstants.HandValueTopPadding;
         var handBottom = playerCardsY + cardSize.Y;
         var valueBottom = handBottom + handValueTopPadding + handValueTextHeight;
-        var valueToButtonsGap = Math.Clamp(viewportHeight * 0.015f, 6f, 14f);
+        var valueToButtonsGap = Math.Clamp(
+            viewportHeight * UIConstants.ActionButtonsVerticalGapRatio,
+            UIConstants.MinActionButtonsVerticalGap,
+            UIConstants.MaxActionButtonsVerticalGap);
         var actionButtonY = valueBottom + valueToButtonsGap + (actionButtonSize.Y / 2f);
-        return Math.Min(actionButtonY, viewportHeight - actionButtonSize.Y * 0.75f);
+        return Math.Min(actionButtonY, viewportHeight - actionButtonSize.Y * UIConstants.ActionButtonsBottomInsetRatio);
     }
 
     public static IReadOnlyList<float> LayoutCenteredRowX(float centerX, float itemWidth, float padding, int itemCount)
