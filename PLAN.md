@@ -24,75 +24,8 @@ MonoBlackjack is a casino-grade blackjack simulator with strong domain modeling 
 ### 1.1 Refactor GameConfig → Immutable GameRules Record (COMPLETE)
 
 ### 1.2 Standardize Coordinate System to Center-Anchor (COMPLETE)
-**Problem:** `CardRenderer.DrawCard` uses top-left origin while `Sprite`/`Button`/`CardSprite` use center-anchor, causing confusion and potential layout bugs.
 
-**Files Affected:**
-- `src/MonoBlackjack.App/Rendering/CardRenderer.cs`
-- `src/MonoBlackjack.App/Rendering/Sprite.cs`
-- `src/MonoBlackjack.App/Controls/Button.cs`
-- `src/MonoBlackjack.App/States/GameState.cs`
-
-**Approach:**
-1. Audit usage of `CardRenderer.DrawCard` and `DrawHand` methods - **FINDING: They're unused!**
-2. Delete `DrawCard` and `DrawHand` methods from `CardRenderer` (only `CreateCardSprite` is used)
-3. Add documentation to `Sprite.cs` and `Button.cs` stating center-anchor is the standard
-4. Create developer guidelines in `CLAUDE.md`:
-   ```
-   ## Coordinate System Standard
-   - ALL UI elements use CENTER-ANCHOR positioning
-   - `Position` property = center point of element
-   - `DestRect` calculates top-left from center: `(Position.X - Size.X/2, Position.Y - Size.Y/2)`
-   - Direct `SpriteBatch.Draw` calls should calculate center→top-left manually
-   ```
-5. Verify all positioning code in `GameState.CalculatePositions()` uses center-anchor (already does)
-
-**Benefits:**
-- Single mental model for all positioning
-- Prevents future off-by-one pixel bugs
-- Easier rotation/scaling (centered transformations)
-
-**Verification:**
-- Visual inspection: Cards and buttons align correctly after resize
-- No layout regressions in MenuState, SettingsState, StatsState
-
----
-
-### 1.3 Add Input Validation Layer
-**Problem:** Public methods in Core lack defensive checks (negative bets, NaN/Infinity decimals, out-of-range values).
-
-**Files Affected:**
-- `src/MonoBlackjack.Core/GameRound.cs`
-- `src/MonoBlackjack.Core/Shoe.cs`
-- `src/MonoBlackjack.Core/Hand.cs`
-
-**Approach:**
-1. Add guard clauses to public methods:
-   ```csharp
-   public void PlaceBet(decimal amount)
-   {
-       if (amount < 0)
-           throw new ArgumentOutOfRangeException(nameof(amount), "Bet cannot be negative");
-       if (decimal.IsNaN(amount) || decimal.IsInfinity(amount))
-           throw new ArgumentException("Bet must be a valid number", nameof(amount));
-       if (Phase != RoundPhase.Betting)
-           throw new InvalidOperationException($"Cannot place bet during {Phase} phase");
-       // ... existing logic
-   }
-   ```
-2. Validate constructor parameters in all Core classes
-3. Add tests for edge cases (negative values, boundary conditions)
-
-**Benefits:**
-- Fail fast with clear errors
-- Prevents garbage-in-garbage-out
-- Better error messages for debugging
-
-**Verification:**
-```bash
-dotnet test MonoBlackjack.slnx  # New validation tests pass
-```
-
----
+### 1.3 Add Input Validation Layer (COMPLETE)
 
 ## Phase 2: UI/UX Core Fixes (Visual Quality)
 **Priority:** P1 - High Impact

@@ -222,7 +222,7 @@ internal sealed class StatsState : State
     {
         var vp = _graphicsDevice.Viewport;
         const string title = "Statistics";
-        float scale = 1.0f;
+        float scale = GetResponsiveScale(1.0f);
         var size = _font.MeasureString(title) * scale;
         sb.DrawString(_font, title, new Vector2(vp.Width / 2f - size.X / 2f, vp.Height * 0.015f),
             Color.White, 0f, Vector2.Zero, scale, SpriteEffects.None, 0f);
@@ -249,9 +249,11 @@ internal sealed class StatsState : State
 
         if (_overview.TotalRounds == 0)
         {
+            var emptyScale = GetResponsiveScale(0.8f);
+            var emptySize = _font.MeasureString("No rounds played yet.") * emptyScale;
             sb.DrawString(_font, "No rounds played yet.",
-                new Vector2(vp.Width / 2f - _font.MeasureString("No rounds played yet.").X * 0.4f, vp.Height * 0.4f),
-                Color.Gray, 0f, Vector2.Zero, 0.8f, SpriteEffects.None, 0f);
+                new Vector2(vp.Width / 2f - emptySize.X / 2f, vp.Height * 0.4f),
+                Color.Gray, 0f, Vector2.Zero, emptyScale, SpriteEffects.None, 0f);
             return;
         }
 
@@ -260,7 +262,7 @@ internal sealed class StatsState : State
             ? $"+${_overview.NetProfit:F0}"
             : $"-${Math.Abs(_overview.NetProfit):F0}";
         Color profitColor = _overview.NetProfit >= 0 ? Color.LightGreen : Color.Salmon;
-        float heroScale = 1.3f;
+        float heroScale = GetResponsiveScale(1.3f);
         var heroSize = _font.MeasureString(profitStr) * heroScale;
         sb.DrawString(_font, profitStr,
             new Vector2(vp.Width / 2f - heroSize.X / 2f, contentTop),
@@ -268,7 +270,7 @@ internal sealed class StatsState : State
 
         // Sub-headline
         string subLine = $"{_overview.TotalRounds} rounds   {_overview.TotalSessions} sessions";
-        float subScale = 0.6f;
+        float subScale = GetResponsiveScale(0.6f);
         var subSize = _font.MeasureString(subLine) * subScale;
         sb.DrawString(_font, subLine,
             new Vector2(vp.Width / 2f - subSize.X / 2f, contentTop + heroSize.Y + 4f),
@@ -286,7 +288,7 @@ internal sealed class StatsState : State
         // Stats grid below chart
         float gridTop = chartTop + chartHeight + 20f;
         float colWidth = vp.Width * 0.3f;
-        float statScale = 0.55f;
+        float statScale = GetResponsiveScale(0.55f);
         float lineHeight = _font.MeasureString("A").Y * statScale + 6f;
 
         int totalHands = _overview.Wins + _overview.Losses + _overview.Pushes + _overview.Blackjacks + _overview.Surrenders;
@@ -338,9 +340,10 @@ internal sealed class StatsState : State
     {
         if (_bankrollHistory.Count < 2)
         {
+            var emptyScale = GetResponsiveScale(0.5f);
             sb.DrawString(_font, "Need 2+ rounds for chart",
                 new Vector2(x + width * 0.3f, y + height * 0.4f),
-                Color.Gray, 0f, Vector2.Zero, 0.5f, SpriteEffects.None, 0f);
+                Color.Gray, 0f, Vector2.Zero, emptyScale, SpriteEffects.None, 0f);
             return;
         }
 
@@ -388,7 +391,7 @@ internal sealed class StatsState : State
         }
 
         // Axis labels
-        float labelScale = 0.4f;
+        float labelScale = GetResponsiveScale(0.4f);
         sb.DrawString(_font, $"${maxVal:F0}",
             new Vector2(x + 2, y + 2),
             Color.Gray, 0f, Vector2.Zero, labelScale, SpriteEffects.None, 0f);
@@ -420,13 +423,15 @@ internal sealed class StatsState : State
         var vp = _graphicsDevice.Viewport;
         float contentTop = vp.Height * 0.13f - _scrollOffset;
         float leftX = vp.Width * 0.06f;
-        float sectionScale = 0.7f;
+        float sectionScale = GetResponsiveScale(0.7f);
 
         if (_overview.TotalRounds == 0)
         {
+            var emptyScale = GetResponsiveScale(0.8f);
+            var emptySize = _font.MeasureString("No data yet.") * emptyScale;
             sb.DrawString(_font, "No data yet.",
-                new Vector2(vp.Width / 2f - _font.MeasureString("No data yet.").X * 0.4f, vp.Height * 0.4f),
-                Color.Gray, 0f, Vector2.Zero, 0.8f, SpriteEffects.None, 0f);
+                new Vector2(vp.Width / 2f - emptySize.X / 2f, vp.Height * 0.4f),
+                Color.Gray, 0f, Vector2.Zero, emptyScale, SpriteEffects.None, 0f);
             return;
         }
 
@@ -505,9 +510,10 @@ internal sealed class StatsState : State
     {
         if (_dealerBusts.Count == 0)
         {
+            var emptyScale = GetResponsiveScale(0.5f);
             sb.DrawString(_font, "No data",
                 new Vector2(x + width * 0.4f, y + height * 0.3f),
-                Color.Gray, 0f, Vector2.Zero, 0.5f, SpriteEffects.None, 0f);
+                Color.Gray, 0f, Vector2.Zero, emptyScale, SpriteEffects.None, 0f);
             return;
         }
 
@@ -516,7 +522,7 @@ internal sealed class StatsState : State
             new Color(20, 20, 20, 180));
 
         float barWidth = width / (UpcardOrder.Length + 1);
-        float labelScale = 0.4f;
+        float labelScale = GetResponsiveScale(0.4f);
         float barPadding = barWidth * 0.2f;
 
         for (int i = 0; i < UpcardOrder.Length; i++)
@@ -558,9 +564,10 @@ internal sealed class StatsState : State
     {
         if (_handValueOutcomes.Count == 0)
         {
+            var emptyScale = GetResponsiveScale(0.5f);
             sb.DrawString(_font, "No data",
                 new Vector2(x + width * 0.4f, y + height * 0.3f),
-                Color.Gray, 0f, Vector2.Zero, 0.5f, SpriteEffects.None, 0f);
+                Color.Gray, 0f, Vector2.Zero, emptyScale, SpriteEffects.None, 0f);
             return;
         }
 
@@ -574,7 +581,7 @@ internal sealed class StatsState : State
         int minVal = 4, maxVal = 21;
         int valRange = maxVal - minVal + 1;
         float cellWidth = width / (valRange + 1);
-        float labelScale = 0.35f;
+        float labelScale = GetResponsiveScale(0.35f);
 
         for (int v = minVal; v <= maxVal; v++)
         {
@@ -607,10 +614,11 @@ internal sealed class StatsState : State
     {
         if (_strategyMatrix.Count == 0)
         {
+            var emptyScale = GetResponsiveScale(0.5f);
             sb.DrawString(_font, "No data for this hand type",
                 new Vector2(x, y),
-                Color.Gray, 0f, Vector2.Zero, 0.5f, SpriteEffects.None, 0f);
-            return _font.MeasureString("A").Y * 0.5f + 8f;
+                Color.Gray, 0f, Vector2.Zero, emptyScale, SpriteEffects.None, 0f);
+            return _font.MeasureString("A").Y * emptyScale + 8f;
         }
 
         // Build lookup: playerValue -> dealerUpcard -> cell
@@ -628,10 +636,11 @@ internal sealed class StatsState : State
         var playerValues = lookup.Keys.Where(v => v >= 4 && v <= 21).OrderByDescending(v => v).ToList();
         if (playerValues.Count == 0)
         {
+            var emptyScale = GetResponsiveScale(0.5f);
             sb.DrawString(_font, "No data for this hand type",
                 new Vector2(x, y),
-                Color.Gray, 0f, Vector2.Zero, 0.5f, SpriteEffects.None, 0f);
-            return _font.MeasureString("A").Y * 0.5f + 8f;
+                Color.Gray, 0f, Vector2.Zero, emptyScale, SpriteEffects.None, 0f);
+            return _font.MeasureString("A").Y * emptyScale + 8f;
         }
 
         int cols = UpcardOrder.Length + 1; // +1 for row header
@@ -639,7 +648,7 @@ internal sealed class StatsState : State
 
         float cellW = Math.Min(width / cols, 70f);
         float cellH = Math.Clamp(_graphicsDevice.Viewport.Height * 0.028f, 18f, 30f);
-        float labelScale = 0.35f;
+        float labelScale = GetResponsiveScale(0.35f);
 
         // Header row
         for (int c = 0; c < UpcardOrder.Length; c++)
@@ -709,9 +718,10 @@ internal sealed class StatsState : State
     {
         if (_cardDistribution.Count == 0)
         {
+            var emptyScale = GetResponsiveScale(0.5f);
             sb.DrawString(_font, "No data",
                 new Vector2(x + width * 0.4f, y + height * 0.3f),
-                Color.Gray, 0f, Vector2.Zero, 0.5f, SpriteEffects.None, 0f);
+                Color.Gray, 0f, Vector2.Zero, emptyScale, SpriteEffects.None, 0f);
             return;
         }
 
@@ -719,7 +729,7 @@ internal sealed class StatsState : State
             new Color(20, 20, 20, 180));
 
         float cellWidth = width / (_cardDistribution.Count + 1);
-        float labelScale = 0.35f;
+        float labelScale = GetResponsiveScale(0.35f);
 
         for (int i = 0; i < _cardDistribution.Count; i++)
         {

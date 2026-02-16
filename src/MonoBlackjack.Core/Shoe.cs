@@ -23,6 +23,11 @@ public class Shoe
 
     public Shoe(int deckCount, int penetrationPercent, bool useCryptographicShuffle, Random? rng = null)
     {
+        if (deckCount < 1 || deckCount > 1000)
+            throw new ArgumentOutOfRangeException(nameof(deckCount), deckCount, "Deck count must be between 1 and 1000.");
+        if (penetrationPercent < 1 || penetrationPercent > 100)
+            throw new ArgumentOutOfRangeException(nameof(penetrationPercent), penetrationPercent, "Penetration percent must be between 1 and 100.");
+
         _deckCount = deckCount;
         _penetrationPercent = penetrationPercent;
         _useCryptoShuffle = useCryptographicShuffle;
@@ -91,6 +96,9 @@ public class Shoe
     /// </summary>
     private int GetRandomInt(int maxValue)
     {
+        if (maxValue <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxValue), maxValue, "Max value must be greater than zero.");
+
         return _useCryptoShuffle
             ? RandomNumberGenerator.GetInt32(maxValue)
             : _rng!.Next(maxValue);
@@ -98,6 +106,9 @@ public class Shoe
 
     private static List<Card> BuildCards(int deckCount)
     {
+        if (deckCount < 1 || deckCount > 1000)
+            throw new ArgumentOutOfRangeException(nameof(deckCount), deckCount, "Deck count must be between 1 and 1000.");
+
         var cards = new List<Card>(deckCount * 52);
         for (int d = 0; d < deckCount; d++)
         {
@@ -114,8 +125,10 @@ public class Shoe
 
     private static int ComputeCutCardRemainingThreshold(int totalCards, int penetrationPercent)
     {
-        int clampedPenetration = Math.Clamp(penetrationPercent, 1, 100);
-        decimal remainingFraction = (100 - clampedPenetration) / 100m;
+        if (penetrationPercent < 1 || penetrationPercent > 100)
+            throw new ArgumentOutOfRangeException(nameof(penetrationPercent), penetrationPercent, "Penetration percent must be between 1 and 100.");
+
+        decimal remainingFraction = (100 - penetrationPercent) / 100m;
         return (int)Math.Ceiling(totalCards * remainingFraction);
     }
 }

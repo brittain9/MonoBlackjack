@@ -5,6 +5,7 @@
     <Project Path="src/MonoBlackjack.Data/MonoBlackjack.Data.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/MonoBlackjack.App.Tests/MonoBlackjack.App.Tests.csproj" />
     <Project Path="tests/MonoBlackjack.Core.Tests/MonoBlackjack.Core.Tests.csproj" />
     <Project Path="tests/MonoBlackjack.Data.Tests/MonoBlackjack.Data.Tests.csproj" />
   </Folder>

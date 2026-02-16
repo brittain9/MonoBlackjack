@@ -5,6 +5,30 @@ namespace MonoBlackjack.Core.Tests;
 
 public class ShoeTests
 {
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(1001)]
+    public void Shoe_InvalidDeckCount_Throws(int invalidDeckCount)
+    {
+        var act = () => new Shoe(invalidDeckCount, 75, false);
+
+        act.Should().Throw<ArgumentOutOfRangeException>()
+            .WithParameterName("deckCount");
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-10)]
+    [InlineData(101)]
+    public void Shoe_InvalidPenetrationPercent_Throws(int invalidPenetration)
+    {
+        var act = () => new Shoe(6, invalidPenetration, false);
+
+        act.Should().Throw<ArgumentOutOfRangeException>()
+            .WithParameterName("penetrationPercent");
+    }
+
     [Fact]
     public void Shoe_SingleDeck_Has52Cards()
     {

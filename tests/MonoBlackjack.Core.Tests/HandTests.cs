@@ -118,6 +118,40 @@ public class HandTests
     }
 
     [Fact]
+    public void Hand_RemoveAt_InvalidIndex_Throws()
+    {
+        var hand = new Hand();
+        hand.AddCard(new Card(Rank.Eight, Suit.Hearts));
+
+        var act = () => hand.RemoveAt(2);
+
+        act.Should().Throw<ArgumentOutOfRangeException>()
+            .WithParameterName("index");
+    }
+
+    [Fact]
+    public void Hand_AddCard_InvalidRank_Throws()
+    {
+        var hand = new Hand();
+
+        var act = () => hand.AddCard(new Card((Rank)0, Suit.Hearts));
+
+        act.Should().Throw<ArgumentOutOfRangeException>()
+            .WithParameterName("card");
+    }
+
+    [Fact]
+    public void Hand_AddCard_InvalidSuit_Throws()
+    {
+        var hand = new Hand();
+
+        var act = () => hand.AddCard(new Card(Rank.Ace, (Suit)99));
+
+        act.Should().Throw<ArgumentOutOfRangeException>()
+            .WithParameterName("card");
+    }
+
+    [Fact]
     public void Hand_StaticEvaluate_WorksWithoutHandInstance()
     {
         var cards = new List<Card>
@@ -127,5 +161,14 @@ public class HandTests
         };
 
         Hand.Evaluate(cards).Should().Be(21);
+    }
+
+    [Fact]
+    public void Hand_StaticEvaluate_NullCards_Throws()
+    {
+        var act = () => Hand.Evaluate(null!);
+
+        act.Should().Throw<ArgumentNullException>()
+            .WithParameterName("cards");
     }
 }

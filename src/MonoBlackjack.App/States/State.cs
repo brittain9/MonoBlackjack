@@ -22,6 +22,22 @@ namespace MonoBlackjack
 
         public abstract void HandleResize(Rectangle vp);
 
+        protected float GetResponsiveScale(float baseScale)
+        {
+            var vp = _graphicsDevice.Viewport;
+            var scaleFactor = MathF.Min(
+                vp.Width / (float)UIConstants.BaselineWidth,
+                vp.Height / (float)UIConstants.BaselineHeight);
+
+            var logicalScale = Math.Clamp(
+                baseScale * scaleFactor,
+                UIConstants.TextMinScale,
+                UIConstants.TextMaxScale);
+
+            // Font atlas is baked larger to improve sampling quality, then drawn down.
+            return logicalScale * UIConstants.FontSupersampleDrawScale;
+        }
+
         public virtual void Dispose() { }
     }
 }

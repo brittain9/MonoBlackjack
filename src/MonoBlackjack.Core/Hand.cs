@@ -28,7 +28,16 @@ public class Hand
         }
     }
 
-    public void AddCard(Card card) => _cards.Add(card);
+    public void AddCard(Card card)
+    {
+        if (!Enum.IsDefined(card.Rank))
+            throw new ArgumentOutOfRangeException(nameof(card), card, "Card rank must be a defined Rank value.");
+        if (!Enum.IsDefined(card.Suit))
+            throw new ArgumentOutOfRangeException(nameof(card), card, "Card suit must be a defined Suit value.");
+
+        _cards.Add(card);
+    }
+
     public void Clear() => _cards.Clear();
 
     /// <summary>
@@ -36,6 +45,9 @@ public class Hand
     /// </summary>
     public Card RemoveAt(int index)
     {
+        if (index < 0 || index >= _cards.Count)
+            throw new ArgumentOutOfRangeException(nameof(index), index, "Index must reference an existing card in the hand.");
+
         var card = _cards[index];
         _cards.RemoveAt(index);
         return card;
@@ -46,6 +58,8 @@ public class Hand
     /// </summary>
     public static int Evaluate(IReadOnlyList<Card> cards)
     {
+        ArgumentNullException.ThrowIfNull(cards);
+
         int value = 0;
         bool hasAce = false;
 

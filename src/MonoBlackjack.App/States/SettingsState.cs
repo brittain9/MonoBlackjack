@@ -68,10 +68,12 @@ internal sealed class SettingsState : State
 
         DrawTitle(spriteBatch);
 
+        var rowScale = GetResponsiveScale(0.85f);
+
         foreach (var row in _rows)
         {
-            spriteBatch.DrawString(_font, row.Label, row.LabelPosition, Color.White, 0f, Vector2.Zero, 0.85f, SpriteEffects.None, 0f);
-            spriteBatch.DrawString(_font, row.SelectedLabel, row.ValuePosition, Color.Gold, 0f, Vector2.Zero, 0.85f, SpriteEffects.None, 0f);
+            spriteBatch.DrawString(_font, row.Label, row.LabelPosition, Color.White, 0f, Vector2.Zero, rowScale, SpriteEffects.None, 0f);
+            spriteBatch.DrawString(_font, row.SelectedLabel, row.ValuePosition, Color.Gold, 0f, Vector2.Zero, rowScale, SpriteEffects.None, 0f);
         }
 
         foreach (var button in _allButtons)
@@ -80,9 +82,10 @@ internal sealed class SettingsState : State
         if (!string.IsNullOrEmpty(_statusMessage))
         {
             var vp = _graphicsDevice.Viewport;
-            var size = _font.MeasureString(_statusMessage) * 0.8f;
+            var statusScale = GetResponsiveScale(0.8f);
+            var size = _font.MeasureString(_statusMessage) * statusScale;
             var pos = new Vector2(vp.Width / 2f - size.X / 2f, vp.Height - size.Y - 12f);
-            spriteBatch.DrawString(_font, _statusMessage, pos, Color.LightGreen, 0f, Vector2.Zero, 0.8f, SpriteEffects.None, 0f);
+            spriteBatch.DrawString(_font, _statusMessage, pos, Color.LightGreen, 0f, Vector2.Zero, statusScale, SpriteEffects.None, 0f);
         }
 
         spriteBatch.End();
@@ -114,9 +117,9 @@ internal sealed class SettingsState : State
         const string subtitle = "Casino Rule Variations";
         var vp = _graphicsDevice.Viewport;
 
-        var titleScale = 1.1f;
+        var titleScale = GetResponsiveScale(1.1f);
         var titleSize = _font.MeasureString(title) * titleScale;
-        var subtitleScale = 0.7f;
+        var subtitleScale = GetResponsiveScale(0.7f);
         var subtitleSize = _font.MeasureString(subtitle) * subtitleScale;
 
         spriteBatch.DrawString(

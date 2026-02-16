@@ -54,6 +54,15 @@ public class GameRound
 
     public GameRound(Shoe shoe, Human player, Dealer dealer, GameRules rules, Action<GameEvent> publish)
     {
+        ArgumentNullException.ThrowIfNull(shoe);
+        ArgumentNullException.ThrowIfNull(player);
+        ArgumentNullException.ThrowIfNull(dealer);
+        ArgumentNullException.ThrowIfNull(rules);
+        ArgumentNullException.ThrowIfNull(publish);
+
+        if (player.Bank < 0)
+            throw new ArgumentOutOfRangeException(nameof(player), "Player bank cannot be negative.");
+
         _shoe = shoe;
         _player = player;
         _dealer = dealer;
@@ -66,14 +75,23 @@ public class GameRound
         if (Phase != RoundPhase.Betting)
             throw new InvalidOperationException($"Cannot place bet in phase {Phase}");
 
+        if (amount < 0)
+            throw new ArgumentOutOfRangeException(nameof(amount), amount, "Bet cannot be negative.");
+
         if (amount == 0)
         {
+            if (_rules.BetFlow != BetFlowMode.FreePlay)
+                throw new ArgumentOutOfRangeException(nameof(amount), amount, "Bet must be greater than zero in betting mode.");
+
             // Free play mode — no bankroll involved
             _bets[0] = 0;
             _publish(new BetPlaced(_player.Name, 0));
             Phase = RoundPhase.Dealing;
             return;
         }
+
+        if (_rules.BetFlow == BetFlowMode.FreePlay)
+            throw new ArgumentOutOfRangeException(nameof(amount), amount, "Free play mode only supports zero-value bets.");
 
         if (_player.Bank < _rules.MinimumBet)
             throw new InvalidOperationException("Insufficient bankroll to place minimum bet.");
@@ -156,7 +174,10 @@ public class GameRound
         if (Phase != RoundPhase.Insurance)
             throw new InvalidOperationException($"Cannot place insurance in phase {Phase}");
 
-        decimal insuranceAmount = _bets[0] / 2;
+        if (!_bets.TryGetValue(0, out var mainBet))
+            throw new InvalidOperationException("Cannot place insurance before a main bet is placed.");
+
+        decimal insuranceAmount = mainBet / 2;
 
         // Auto-decline if insufficient funds
         if (AvailableFunds < insuranceAmount)
@@ -506,6 +527,8 @@ public class GameRound
     {
         if (Phase != RoundPhase.DealerTurn)
             throw new InvalidOperationException($"Cannot play dealer turn in phase {Phase}");
+        if (_dealer.Hand.Cards.Count < 2)
+            throw new InvalidOperationException("Dealer hand must contain at least two cards before dealer turn.");
 
         _publish(new DealerTurnStarted());
 
@@ -533,7 +556,8 @@ public class GameRound
         for (int i = 0; i < _player.Hands.Count; i++)
         {
             var playerHand = _player.Hands[i];
-            var bet = _bets[i];
+            if (!_bets.TryGetValue(i, out var bet))
+                throw new InvalidOperationException($"Missing bet for hand index {i}.");
 
             HandOutcome outcome;
             decimal payout;

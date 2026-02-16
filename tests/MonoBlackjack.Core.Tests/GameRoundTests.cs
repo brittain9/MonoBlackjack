@@ -19,6 +19,41 @@ public class GameRoundTests
     }
 
     [Fact]
+    public void Constructor_NullDependencies_Throw()
+    {
+        var shoe = new Shoe(1, 75, false, new Random(42));
+        var player = new Human("Player", 1000m);
+        var dealer = new Dealer(false);
+        var rules = GameRules.Standard;
+        Action<GameEvent> publish = e => _events.Add(e);
+
+        Action actShoe = () => new GameRound(null!, player, dealer, rules, publish);
+        Action actPlayer = () => new GameRound(shoe, null!, dealer, rules, publish);
+        Action actDealer = () => new GameRound(shoe, player, null!, rules, publish);
+        Action actRules = () => new GameRound(shoe, player, dealer, null!, publish);
+        Action actPublish = () => new GameRound(shoe, player, dealer, rules, null!);
+
+        actShoe.Should().Throw<ArgumentNullException>().WithParameterName("shoe");
+        actPlayer.Should().Throw<ArgumentNullException>().WithParameterName("player");
+        actDealer.Should().Throw<ArgumentNullException>().WithParameterName("dealer");
+        actRules.Should().Throw<ArgumentNullException>().WithParameterName("rules");
+        actPublish.Should().Throw<ArgumentNullException>().WithParameterName("publish");
+    }
+
+    [Fact]
+    public void Constructor_NegativePlayerBank_Throws()
+    {
+        var shoe = new Shoe(1, 75, false, new Random(42));
+        var player = new Human("Player", -1m);
+        var dealer = new Dealer(false);
+
+        var act = () => new GameRound(shoe, player, dealer, GameRules.Standard, e => _events.Add(e));
+
+        act.Should().Throw<ArgumentOutOfRangeException>()
+            .WithParameterName("player");
+    }
+
+    [Fact]
     public void Deal_Publishes4CardDealtAndInitialDealComplete()
     {
         var round = CreateRound();
@@ -122,6 +157,52 @@ public class GameRoundTests
 
         var bet = _events.OfType<BetPlaced>().Single();
         bet.Amount.Should().Be(GameRules.Standard.MinimumBet);
+    }
+
+    [Fact]
+    public void PlaceBet_Negative_Throws()
+    {
+        var round = CreateRound();
+
+        var act = () => round.PlaceBet(-5m);
+
+        act.Should().Throw<ArgumentOutOfRangeException>()
+            .WithParameterName("amount");
+    }
+
+    [Fact]
+    public void PlaceBet_ZeroInBettingMode_Throws()
+    {
+        var round = CreateRound();
+
+        var act = () => round.PlaceBet(0m);
+
+        act.Should().Throw<ArgumentOutOfRangeException>()
+            .WithParameterName("amount");
+    }
+
+    [Fact]
+    public void PlaceBet_ZeroInFreePlayMode_AllowsBet()
+    {
+        var freePlayRules = GameRules.Standard with { BetFlow = BetFlowMode.FreePlay };
+        var round = CreateRound(rules: freePlayRules);
+
+        round.PlaceBet(0m);
+
+        var bet = _events.OfType<BetPlaced>().Single();
+        bet.Amount.Should().Be(0m);
+    }
+
+    [Fact]
+    public void PlaceBet_PositiveInFreePlayMode_Throws()
+    {
+        var freePlayRules = GameRules.Standard with { BetFlow = BetFlowMode.FreePlay };
+        var round = CreateRound(rules: freePlayRules);
+
+        var act = () => round.PlaceBet(10m);
+
+        act.Should().Throw<ArgumentOutOfRangeException>()
+            .WithParameterName("amount");
     }
 
     [Fact]

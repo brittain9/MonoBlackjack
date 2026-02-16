@@ -12,10 +12,16 @@ namespace MonoBlackjack
     public class Button : MonoBlackjack.Component
     {
         private MouseState _currentMouse;
-        private SpriteFont _font;
+        private readonly SpriteFont _font;
         private bool _isHovering;
         private MouseState _previousMouse;
-        private Texture2D _texture;
+        private readonly Texture2D _texture;
+        private Vector2 _size;
+        private string _text = string.Empty;
+        private bool _textLayoutDirty = true;
+        private Vector2 _cachedTextSize;
+        private Vector2 _cachedScaledTextSize;
+        private float _cachedTextScale = 1f;
 
         public event EventHandler? Click;
         public bool Clicked { get; private set; }
@@ -24,7 +30,18 @@ namespace MonoBlackjack
         /// Center-anchor screen position.
         /// </summary>
         public Vector2 Position { get; set; }
-        public Vector2 Size { get; set; }
+        public Vector2 Size
+        {
+            get => _size;
+            set
+            {
+                if (_size == value)
+                    return;
+
+                _size = value;
+                _textLayoutDirty = true;
+            }
+        }
         public Rectangle DestRect
         {
             get
@@ -37,7 +54,19 @@ namespace MonoBlackjack
                     (int)Size.Y);
             }
         }
-        public string Text { get; set; } = "";
+        public string Text
+        {
+            get => _text;
+            set
+            {
+                value ??= string.Empty;
+                if (string.Equals(_text, value, StringComparison.Ordinal))
+                    return;
+
+                _text = value;
+                _textLayoutDirty = true;
+            }
+        }
         public Texture2D Texture { get { return _texture; } }
 
         public Button(Texture2D texture, SpriteFont font)
@@ -62,18 +91,12 @@ namespace MonoBlackjack
                 SpriteEffects.None,
                 0f);
 
-            if(!string.IsNullOrEmpty(Text))
+            if (!string.IsNullOrEmpty(Text))
             {
-                var padding = 8f;
-                var maxWidth = DestRect.Width - padding * 2;
-                var maxHeight = DestRect.Height - padding * 2;
-                var textSize = _font.MeasureString(Text);
-                var scale = Math.Min(1f, Math.Min(maxWidth / textSize.X, maxHeight / textSize.Y));
-
-                var scaledSize = textSize * scale;
+                UpdateTextLayoutCache();
                 var textPosition = new Vector2(
-                    DestRect.Center.X - scaledSize.X / 2f,
-                    DestRect.Center.Y - scaledSize.Y / 2f);
+                    DestRect.Center.X - _cachedScaledTextSize.X / 2f,
+                    DestRect.Center.Y - _cachedScaledTextSize.Y / 2f);
 
                 spriteBatch.DrawString(
                     _font,
@@ -82,10 +105,35 @@ namespace MonoBlackjack
                     PenColor,
                     0f,
                     Vector2.Zero,
-                    scale,
+                    _cachedTextScale,
                     SpriteEffects.None,
                     0f);
             }
+        }
+
+        private void UpdateTextLayoutCache()
+        {
+            if (!_textLayoutDirty)
+                return;
+
+            _cachedTextSize = _font.MeasureString(Text);
+            if (_cachedTextSize.X <= 0f || _cachedTextSize.Y <= 0f)
+            {
+                _cachedTextScale = UIConstants.FontSupersampleDrawScale;
+                _cachedScaledTextSize = Vector2.Zero;
+                _textLayoutDirty = false;
+                return;
+            }
+
+            const float padding = 8f;
+            var maxWidth = Math.Max(1f, DestRect.Width - padding * 2f);
+            var maxHeight = Math.Max(1f, DestRect.Height - padding * 2f);
+            var fitScale = Math.Min(maxWidth / _cachedTextSize.X, maxHeight / _cachedTextSize.Y);
+            var minScale = UIConstants.TextMinScale * UIConstants.FontSupersampleDrawScale;
+            var maxScale = UIConstants.FontSupersampleDrawScale;
+            _cachedTextScale = Math.Clamp(fitScale, minScale, maxScale);
+            _cachedScaledTextSize = _cachedTextSize * _cachedTextScale;
+            _textLayoutDirty = false;
         }
 
         public override void Update(GameTime gameTime)

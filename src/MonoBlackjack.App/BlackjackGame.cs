@@ -18,6 +18,7 @@ public class BlackjackGame : Microsoft.Xna.Framework.Game
     private IStatsRepository _statsRepository = null!;
     private ISettingsRepository _settingsRepository = null!;
     private Texture2D _pixelTexture = null!;
+    private bool _enforcingMinimumWindowSize;
 
     public void ChangeState(State state) => _nextState = state;
     public IStatsRepository StatsRepository => _statsRepository;
@@ -37,14 +38,41 @@ public class BlackjackGame : Microsoft.Xna.Framework.Game
     protected override void Initialize()
     {
         Window.AllowUserResizing = true;
-        Window.ClientSizeChanged += (_, _) => _currentState.HandleResize(Window.ClientBounds);
+        Window.ClientSizeChanged += OnClientSizeChanged;
 
-        _graphics.PreferredBackBufferWidth = 1280;
-        _graphics.PreferredBackBufferHeight = 720;
+        _graphics.PreferredBackBufferWidth = UIConstants.BaselineWidth;
+        _graphics.PreferredBackBufferHeight = UIConstants.BaselineHeight;
         _graphics.ApplyChanges();
+        EnforceMinimumWindowSize();
 
         IsMouseVisible = true;
         base.Initialize();
+    }
+
+    private void OnClientSizeChanged(object? sender, EventArgs e)
+    {
+        if (_enforcingMinimumWindowSize)
+            return;
+
+        EnforceMinimumWindowSize();
+
+        if (_currentState is not null)
+            _currentState.HandleResize(Window.ClientBounds);
+    }
+
+    private void EnforceMinimumWindowSize()
+    {
+        var width = Math.Max(Window.ClientBounds.Width, UIConstants.MinWindowWidth);
+        var height = Math.Max(Window.ClientBounds.Height, UIConstants.MinWindowHeight);
+
+        if (width == Window.ClientBounds.Width && height == Window.ClientBounds.Height)
+            return;
+
+        _enforcingMinimumWindowSize = true;
+        _graphics.PreferredBackBufferWidth = width;
+        _graphics.PreferredBackBufferHeight = height;
+        _graphics.ApplyChanges();
+        _enforcingMinimumWindowSize = false;
     }
 
     protected override void LoadContent()

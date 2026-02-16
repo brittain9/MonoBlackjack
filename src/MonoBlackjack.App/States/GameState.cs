@@ -7,6 +7,7 @@ using MonoBlackjack.Core.Events;
 using MonoBlackjack.Core.Ports;
 using MonoBlackjack.Core.Players;
 using MonoBlackjack.Events;
+using MonoBlackjack.Layout;
 using MonoBlackjack.Rendering;
 using MonoBlackjack.Stats;
 
@@ -14,15 +15,6 @@ namespace MonoBlackjack;
 
 internal class GameState : State
 {
-    private const float CardAspectRatio = 100f / 145f;
-    private const float DealerCardsYRatio = 0.18f;
-    private const float PlayerCardsYRatio = 0.52f;
-    private const float SingleHandSpacingRatio = 1.08f;
-    private const float MultiHandCardStepRatio = 0.72f;
-    private const float MultiHandGapRatio = 0.9f;
-    private const float MinMultiHandGapViewportRatio = 0.04f;
-    private const float ActionButtonPaddingRatio = 0.012f;
-
     private readonly Texture2D _pixelTexture;
     private readonly GameRules _rules;
     private readonly Shoe _shoe;
@@ -210,32 +202,25 @@ internal class GameState : State
     private void CalculatePositions()
     {
         var vp = _graphicsDevice.Viewport;
-        var cardHeight = Math.Clamp(vp.Height * 0.2f, 120f, 220f);
-        var cardWidth = cardHeight * CardAspectRatio;
-        _cardSize = new Vector2(cardWidth, cardHeight);
+        _cardSize = GameLayoutCalculator.CalculateCardSize(vp.Height);
 
         _deckPosition = new Vector2(-_cardSize.X, vp.Height / 2f);
 
         var centerX = vp.Width / 2f;
 
         // Size buttons so 5 actions can fit, then reflow visible actions each frame.
-        const int maxActionButtons = 5; // Hit, Stand, Split, Double, Surrender
-        _actionButtonPadding = Math.Clamp(vp.Width * ActionButtonPaddingRatio, 10f, 20f);
-        var availableWidth = vp.Width * 0.92f;
-        var maxButtonWidth = (availableWidth - (_actionButtonPadding * (maxActionButtons - 1))) / maxActionButtons;
-        var buttonWidth = Math.Clamp(Math.Min(_cardSize.X * 1.2f, maxButtonWidth), 90f, 220f);
-        var buttonHeight = Math.Clamp(_cardSize.Y * 0.35f, 34f, 74f);
-        _actionButtonSize = new Vector2(buttonWidth, buttonHeight);
+        _actionButtonPadding = GameLayoutCalculator.CalculateActionButtonPadding(vp.Width);
+        _actionButtonSize = GameLayoutCalculator.CalculateActionButtonSize(vp.Width, _cardSize, _actionButtonPadding);
 
         // Keep action buttons below hand-value labels to avoid collisions.
-        const float handValueScale = 0.9f;
-        const float handValueTopPadding = 8f;
-        var handBottom = GetPlayerCardsY() + _cardSize.Y;
+        var handValueScale = GetResponsiveScale(0.9f);
         var handValueHeight = _font.MeasureString("18").Y * handValueScale;
-        var valueBottom = handBottom + handValueTopPadding + handValueHeight;
-        var valueToButtonsGap = Math.Clamp(vp.Height * 0.015f, 6f, 14f);
-        _actionButtonY = valueBottom + valueToButtonsGap + (_actionButtonSize.Y / 2f);
-        _actionButtonY = Math.Min(_actionButtonY, vp.Height - _actionButtonSize.Y * 0.75f);
+        _actionButtonY = GameLayoutCalculator.CalculateActionButtonY(
+            vp.Height,
+            GetPlayerCardsY(),
+            _cardSize,
+            _actionButtonSize,
+            handValueHeight);
 
         // Set all button sizes once; row placement happens in LayoutActionButtons.
         _hitButton.Size = _actionButtonSize;
@@ -264,10 +249,10 @@ internal class GameState : State
         _betUpButton.Position = new Vector2(centerX + betArrowSpacing, betCenterY);
 
         _dealButton.Size = _actionButtonSize;
-        _dealButton.Position = new Vector2(centerX, betCenterY + _actionButtonSize.Y * 1.5f);
+        _dealButton.Position = new Vector2(centerX, betCenterY + vp.Height * UIConstants.DealButtonOffsetRatio);
 
         _repeatBetButton.Size = _actionButtonSize;
-        _repeatBetButton.Position = new Vector2(centerX, betCenterY + _actionButtonSize.Y * 2.8f);
+        _repeatBetButton.Position = new Vector2(centerX, betCenterY + vp.Height * UIConstants.RepeatBetButtonOffsetRatio);
 
         // Bankrupt phase layout - two buttons centered
         _resetBankrollButton.Size = _actionButtonSize;
@@ -289,14 +274,17 @@ internal class GameState : State
             return;
 
         var centerX = _graphicsDevice.Viewport.Width / 2f;
-        var totalWidth = (_actionButtonSize.X * rowButtons.Count) + (_actionButtonPadding * (rowButtons.Count - 1));
-        var startX = centerX - (totalWidth / 2f) + (_actionButtonSize.X / 2f);
+        var centers = GameLayoutCalculator.LayoutCenteredRowX(
+            centerX,
+            _actionButtonSize.X,
+            _actionButtonPadding,
+            rowButtons.Count);
 
         for (int i = 0; i < rowButtons.Count; i++)
         {
             var button = rowButtons[i];
             button.Size = _actionButtonSize;
-            button.Position = new Vector2(startX + i * (_actionButtonSize.X + _actionButtonPadding), _actionButtonY);
+            button.Position = new Vector2(centers[i], _actionButtonY);
         }
     }
 
@@ -320,14 +308,12 @@ internal class GameState : State
 
     private float GetDealerCardsY()
     {
-        var vp = _graphicsDevice.Viewport;
-        return vp.Height * DealerCardsYRatio;
+        return GameLayoutCalculator.CalculateDealerCardsY(_graphicsDevice.Viewport.Height);
     }
 
     private float GetPlayerCardsY()
     {
-        var vp = _graphicsDevice.Viewport;
-        return vp.Height * PlayerCardsYRatio;
+        return GameLayoutCalculator.CalculatePlayerCardsY(_graphicsDevice.Viewport.Height);
     }
 
     private int GetPlayerHandCount()
@@ -359,7 +345,12 @@ internal class GameState : State
         if (recipient == _dealer.Name)
         {
             int dealerTotal = Math.Max(_dealerCardCount, 2);
-            return ComputeRowCardCenter(vp, dealerTotal, cardIndexInHand, GetDealerCardsY() + halfCard.Y);
+            return GameLayoutCalculator.ComputeRowCardCenter(
+                vp.Width,
+                _cardSize,
+                dealerTotal,
+                cardIndexInHand,
+                GetDealerCardsY() + halfCard.Y);
         }
 
         // Player: hands spread horizontally from center
@@ -369,70 +360,25 @@ internal class GameState : State
         if (totalHands <= 1)
         {
             int cardCount = GetPlayerCardCount(0);
-            return ComputeRowCardCenter(vp, cardCount, cardIndexInHand, centerY);
+            return GameLayoutCalculator.ComputeRowCardCenter(
+                vp.Width,
+                _cardSize,
+                cardCount,
+                cardIndexInHand,
+                centerY);
         }
 
-        // Multiple hands: spread horizontally
-        var cardStep = _cardSize.X * MultiHandCardStepRatio;
-        var handGap = Math.Max(_cardSize.X * MultiHandGapRatio, vp.Width * MinMultiHandGapViewportRatio);
+        var handCardCounts = new int[totalHands];
+        for (int i = 0; i < totalHands; i++)
+            handCardCounts[i] = GetPlayerCardCount(i);
 
-        // Calculate total width of all hands
-        float totalWidth = ComputeMultiHandWidth(totalHands, cardStep, handGap);
-
-        // Adaptive scaling: if total width exceeds viewport, scale down
-        float maxWidth = vp.Width * 0.9f;
-        if (totalWidth > maxWidth)
-        {
-            float scale = maxWidth / totalWidth;
-            cardStep *= scale;
-            handGap = Math.Max(handGap * scale, _cardSize.X * 0.25f);
-            totalWidth = ComputeMultiHandWidth(totalHands, cardStep, handGap);
-        }
-
-        // Find x offset for this hand's first card center
-        float handStartX = vp.Width / 2f - totalWidth / 2f;
-        for (int h = 0; h < handIndex; h++)
-        {
-            int cc = GetPlayerCardCount(h);
-            handStartX += _cardSize.X + cardStep * (cc - 1) + handGap;
-        }
-
-        // Card center within this hand
-        float cardCenterX = handStartX + halfCard.X + cardStep * cardIndexInHand;
-        return new Vector2(cardCenterX, centerY);
-    }
-
-    /// <summary>
-    /// Computes center position for a card in a single row (dealer or single player hand).
-    /// Adapts overlap when cards would overflow the viewport.
-    /// </summary>
-    private Vector2 ComputeRowCardCenter(Viewport vp, int cardCount, int cardIndex, float centerY)
-    {
-        var halfCard = _cardSize / 2f;
-        var spacing = _cardSize.X * SingleHandSpacingRatio;
-
-        // Adaptive: if row overflows viewport, compress spacing
-        float rowWidth = _cardSize.X + spacing * (cardCount - 1);
-        float maxWidth = vp.Width * 0.9f;
-        if (rowWidth > maxWidth && cardCount > 1)
-            spacing = Math.Max((maxWidth - _cardSize.X) / (cardCount - 1), _cardSize.X * 0.55f);
-
-        float totalRowWidth = _cardSize.X + spacing * (cardCount - 1);
-        float startX = vp.Width / 2f - totalRowWidth / 2f;
-        float cardCenterX = startX + halfCard.X + spacing * cardIndex;
-        return new Vector2(cardCenterX, centerY);
-    }
-
-    private float ComputeMultiHandWidth(int totalHands, float cardStep, float handGap)
-    {
-        float totalWidth = 0;
-        for (int h = 0; h < totalHands; h++)
-        {
-            int cc = GetPlayerCardCount(h);
-            totalWidth += _cardSize.X + cardStep * (cc - 1);
-        }
-        totalWidth += handGap * (totalHands - 1);
-        return totalWidth;
+        return GameLayoutCalculator.ComputeMultiHandCardCenter(
+            vp.Width,
+            _cardSize,
+            handCardCounts,
+            handIndex,
+            cardIndexInHand,
+            centerY);
     }
 
     private bool IsPlayerInteractionEnabled()
@@ -483,6 +429,7 @@ internal class GameState : State
 
     private TextSprite CreateLabel(string text, Color color, Vector2 position)
     {
+        var targetScale = GetResponsiveScale(1f);
         var label = new TextSprite
         {
             Text = text,
@@ -490,13 +437,13 @@ internal class GameState : State
             TextColor = color,
             Position = position,
             Opacity = 0f,
-            Scale = 0.5f,
+            Scale = targetScale * 0.5f,
             ZOrder = 100
         };
 
         _uiLayer.Add(label);
         _tweenManager.Add(TweenBuilder.FadeTo(label, 1f, 0.3f));
-        _tweenManager.Add(TweenBuilder.ScaleTo(label, 1f, 0.3f, 0f, Easing.EaseOutBack));
+        _tweenManager.Add(TweenBuilder.ScaleTo(label, targetScale, 0.3f, 0f, Easing.EaseOutBack));
 
         return label;
     }
@@ -918,14 +865,17 @@ internal class GameState : State
 
             // Bet amount display centered between arrows
             var betText = $"${_pendingBet}";
-            var betTextSize = _font.MeasureString(betText);
+            var betTextScale = GetResponsiveScale(1f);
+            var betTextSize = _font.MeasureString(betText) * betTextScale;
             var betTextPos = new Vector2(vp.Width / 2f - betTextSize.X / 2f, vp.Height * 0.5f - betTextSize.Y / 2f);
-            spriteBatch.DrawString(_font, betText, betTextPos, Color.Gold);
+            spriteBatch.DrawString(_font, betText, betTextPos, Color.Gold, 0f, Vector2.Zero, betTextScale, SpriteEffects.None, 0f);
 
             var betLabel = "Place Your Bet";
-            var labelSize = _font.MeasureString(betLabel) * 0.8f;
-            var labelPos = new Vector2(vp.Width / 2f - labelSize.X / 2f, vp.Height * 0.5f - betTextSize.Y - 20f);
-            spriteBatch.DrawString(_font, betLabel, labelPos, Color.White, 0f, Vector2.Zero, 0.8f, SpriteEffects.None, 0f);
+            var betLabelScale = GetResponsiveScale(0.8f);
+            var labelSize = _font.MeasureString(betLabel) * betLabelScale;
+            var labelYOffset = Math.Max(vp.Height * 0.028f, 12f);
+            var labelPos = new Vector2(vp.Width / 2f - labelSize.X / 2f, vp.Height * 0.5f - betTextSize.Y - labelYOffset);
+            spriteBatch.DrawString(_font, betLabel, labelPos, Color.White, 0f, Vector2.Zero, betLabelScale, SpriteEffects.None, 0f);
 
             _betDownButton.Draw(gameTime, spriteBatch);
             _betUpButton.Draw(gameTime, spriteBatch);
@@ -942,9 +892,10 @@ internal class GameState : State
             spriteBatch.Begin();
 
             var outText = "Out of Funds";
-            var outSize = _font.MeasureString(outText);
+            var outScale = GetResponsiveScale(1f);
+            var outSize = _font.MeasureString(outText) * outScale;
             var outPos = new Vector2(vp.Width / 2f - outSize.X / 2f, vp.Height * 0.4f);
-            spriteBatch.DrawString(_font, outText, outPos, Color.Red);
+            spriteBatch.DrawString(_font, outText, outPos, Color.Red, 0f, Vector2.Zero, outScale, SpriteEffects.None, 0f);
 
             _resetBankrollButton.Draw(gameTime, spriteBatch);
             _menuButton.Draw(gameTime, spriteBatch);
@@ -992,15 +943,36 @@ internal class GameState : State
 
     private void DrawHud(SpriteBatch spriteBatch, Viewport vp)
     {
+        var hudScale = GetResponsiveScale(0.7f);
+        var hudPaddingX = Math.Max(vp.Width * 0.01f, 8f);
+        var hudPaddingY = Math.Max(vp.Height * 0.011f, 6f);
+
         var bankText = $"Bank: ${_player.Bank}";
-        var bankSize = _font.MeasureString(bankText) * 0.7f;
-        spriteBatch.DrawString(_font, bankText, new Vector2(12f, 8f), Color.White, 0f, Vector2.Zero, 0.7f, SpriteEffects.None, 0f);
+        spriteBatch.DrawString(
+            _font,
+            bankText,
+            new Vector2(hudPaddingX, hudPaddingY),
+            Color.White,
+            0f,
+            Vector2.Zero,
+            hudScale,
+            SpriteEffects.None,
+            0f);
 
         if (_gamePhase == GamePhase.Playing && _round != null!)
         {
             var betText = $"Bet: ${_lastBet}";
-            var betSize = _font.MeasureString(betText) * 0.7f;
-            spriteBatch.DrawString(_font, betText, new Vector2(vp.Width - betSize.X - 12f, 8f), Color.Gold, 0f, Vector2.Zero, 0.7f, SpriteEffects.None, 0f);
+            var betSize = _font.MeasureString(betText) * hudScale;
+            spriteBatch.DrawString(
+                _font,
+                betText,
+                new Vector2(vp.Width - betSize.X - hudPaddingX, hudPaddingY),
+                Color.Gold,
+                0f,
+                Vector2.Zero,
+                hudScale,
+                SpriteEffects.None,
+                0f);
         }
     }
 
@@ -1010,7 +982,8 @@ internal class GameState : State
             return;
 
         var vp = _graphicsDevice.Viewport;
-        const float scale = 0.9f;
+        var scale = GetResponsiveScale(0.9f);
+        var labelPadding = Math.Max(vp.Height * 0.01f, 6f);
 
         // Draw dealer hand value (only show upcard value before dealer turn)
         if (_dealerCardCount > 0)
@@ -1030,7 +1003,7 @@ internal class GameState : State
             }
 
             var dealerTextSize = _font.MeasureString(dealerValueText) * scale;
-            var dealerY = GetDealerCardsY() - dealerTextSize.Y - 8f;
+            var dealerY = GetDealerCardsY() - dealerTextSize.Y - labelPadding;
             var dealerX = vp.Width / 2f - dealerTextSize.X / 2f;
             spriteBatch.DrawString(_font, dealerValueText, new Vector2(dealerX, dealerY), Color.White, 0f, Vector2.Zero, scale, SpriteEffects.None, 0f);
         }
@@ -1060,7 +1033,7 @@ internal class GameState : State
             float handBottom = GetPlayerCardsY() + _cardSize.Y;
 
             var textX = handCenterX - textSize.X / 2f;
-            var textY = handBottom + 8f;
+            var textY = handBottom + labelPadding;
 
             spriteBatch.DrawString(_font, valueText, new Vector2(textX, textY), valueColor, 0f, Vector2.Zero, scale, SpriteEffects.None, 0f);
         }
