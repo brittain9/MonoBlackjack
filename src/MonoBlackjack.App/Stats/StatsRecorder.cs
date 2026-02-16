@@ -6,7 +6,7 @@ using MonoBlackjack.Events;
 
 namespace MonoBlackjack.Stats;
 
-internal sealed class StatsRecorder
+internal sealed class StatsRecorder : IDisposable
 {
     private readonly IStatsRepository _statsRepository;
     private readonly int _profileId;
@@ -15,6 +15,7 @@ internal sealed class StatsRecorder
     private readonly List<TrackedDecision> _decisions = [];
     private readonly Dictionary<int, List<Card>> _playerHands = new();
     private readonly List<Card> _dealerCards = [];
+    private readonly List<IDisposable> _subscriptions = [];
 
     private decimal _betAmount;
     private decimal _insurancePayoutTotal;
@@ -28,18 +29,25 @@ internal sealed class StatsRecorder
         _statsRepository = statsRepository;
         _profileId = profileId;
 
-        eventBus.Subscribe<BetPlaced>(OnBetPlaced);
-        eventBus.Subscribe<CardDealt>(OnCardDealt);
-        eventBus.Subscribe<PlayerHit>(OnPlayerHit);
-        eventBus.Subscribe<PlayerStood>(OnPlayerStood);
-        eventBus.Subscribe<PlayerDoubledDown>(OnPlayerDoubledDown);
-        eventBus.Subscribe<PlayerSplit>(OnPlayerSplit);
-        eventBus.Subscribe<PlayerSurrendered>(OnPlayerSurrendered);
-        eventBus.Subscribe<DealerHit>(OnDealerHit);
-        eventBus.Subscribe<DealerBusted>(OnDealerBusted);
-        eventBus.Subscribe<InsuranceResult>(OnInsuranceResult);
-        eventBus.Subscribe<HandResolved>(OnHandResolved);
-        eventBus.Subscribe<RoundComplete>(OnRoundComplete);
+        _subscriptions.Add(eventBus.Subscribe<BetPlaced>(OnBetPlaced));
+        _subscriptions.Add(eventBus.Subscribe<CardDealt>(OnCardDealt));
+        _subscriptions.Add(eventBus.Subscribe<PlayerHit>(OnPlayerHit));
+        _subscriptions.Add(eventBus.Subscribe<PlayerStood>(OnPlayerStood));
+        _subscriptions.Add(eventBus.Subscribe<PlayerDoubledDown>(OnPlayerDoubledDown));
+        _subscriptions.Add(eventBus.Subscribe<PlayerSplit>(OnPlayerSplit));
+        _subscriptions.Add(eventBus.Subscribe<PlayerSurrendered>(OnPlayerSurrendered));
+        _subscriptions.Add(eventBus.Subscribe<DealerHit>(OnDealerHit));
+        _subscriptions.Add(eventBus.Subscribe<DealerBusted>(OnDealerBusted));
+        _subscriptions.Add(eventBus.Subscribe<InsuranceResult>(OnInsuranceResult));
+        _subscriptions.Add(eventBus.Subscribe<HandResolved>(OnHandResolved));
+        _subscriptions.Add(eventBus.Subscribe<RoundComplete>(OnRoundComplete));
+    }
+
+    public void Dispose()
+    {
+        foreach (var subscription in _subscriptions)
+            subscription.Dispose();
+        _subscriptions.Clear();
     }
 
     private void OnBetPlaced(BetPlaced evt)

@@ -154,7 +154,16 @@ public class GameRound
         if (Phase != RoundPhase.Insurance)
             throw new InvalidOperationException($"Cannot place insurance in phase {Phase}");
 
-        _insuranceBet = _bets[0] / 2;
+        decimal insuranceAmount = _bets[0] / 2;
+
+        // Auto-decline if insufficient funds
+        if (AvailableFunds < insuranceAmount)
+        {
+            DeclineInsurance();
+            return;
+        }
+
+        _insuranceBet = insuranceAmount;
         _publish(new InsurancePlaced(_player.Name, _insuranceBet));
 
         ResolveAfterInsuranceDecision();
@@ -430,6 +439,15 @@ public class GameRound
             return false;
 
         return AvailableFunds >= _bets[_currentHandIndex];
+    }
+
+    public bool CanPlaceInsurance()
+    {
+        if (Phase != RoundPhase.Insurance)
+            return false;
+
+        decimal insuranceAmount = _bets[0] / 2;
+        return AvailableFunds >= insuranceAmount;
     }
 
     public bool CanSurrender()

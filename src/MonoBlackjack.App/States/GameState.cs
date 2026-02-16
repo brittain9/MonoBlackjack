@@ -47,6 +47,7 @@ internal class GameState : State
     private readonly Button _resetBankrollButton;
     private readonly Button _menuButton;
     private readonly StatsRecorder _statsRecorder;
+    private readonly List<IDisposable> _subscriptions = [];
 
     private readonly List<TrackedCardSprite> _trackedCards = [];
     private readonly HashSet<int> _bustedHands = new();
@@ -159,23 +160,23 @@ internal class GameState : State
         _resetBankrollButton.Click += OnResetBankrollClicked;
         _menuButton.Click += OnMenuClicked;
 
-        _eventBus.Subscribe<CardDealt>(OnCardDealt);
-        _eventBus.Subscribe<InitialDealComplete>(OnInitialDealComplete);
-        _eventBus.Subscribe<PlayerHit>(OnPlayerHit);
-        _eventBus.Subscribe<PlayerDoubledDown>(OnPlayerDoubledDown);
-        _eventBus.Subscribe<PlayerBusted>(OnPlayerBusted);
-        _eventBus.Subscribe<PlayerStood>(OnPlayerStood);
-        _eventBus.Subscribe<PlayerTurnStarted>(OnPlayerTurnStarted);
-        _eventBus.Subscribe<PlayerSplit>(OnPlayerSplit);
-        _eventBus.Subscribe<DealerTurnStarted>(OnDealerTurnStarted);
-        _eventBus.Subscribe<DealerHit>(OnDealerHit);
-        _eventBus.Subscribe<DealerHoleCardRevealed>(OnDealerHoleCardRevealed);
-        _eventBus.Subscribe<DealerBusted>(OnDealerBusted);
-        _eventBus.Subscribe<DealerStood>(OnDealerStood);
-        _eventBus.Subscribe<InsuranceOffered>(OnInsuranceOffered);
-        _eventBus.Subscribe<InsuranceResult>(OnInsuranceResult);
-        _eventBus.Subscribe<HandResolved>(OnHandResolved);
-        _eventBus.Subscribe<RoundComplete>(OnRoundComplete);
+        _subscriptions.Add(_eventBus.Subscribe<CardDealt>(OnCardDealt));
+        _subscriptions.Add(_eventBus.Subscribe<InitialDealComplete>(OnInitialDealComplete));
+        _subscriptions.Add(_eventBus.Subscribe<PlayerHit>(OnPlayerHit));
+        _subscriptions.Add(_eventBus.Subscribe<PlayerDoubledDown>(OnPlayerDoubledDown));
+        _subscriptions.Add(_eventBus.Subscribe<PlayerBusted>(OnPlayerBusted));
+        _subscriptions.Add(_eventBus.Subscribe<PlayerStood>(OnPlayerStood));
+        _subscriptions.Add(_eventBus.Subscribe<PlayerTurnStarted>(OnPlayerTurnStarted));
+        _subscriptions.Add(_eventBus.Subscribe<PlayerSplit>(OnPlayerSplit));
+        _subscriptions.Add(_eventBus.Subscribe<DealerTurnStarted>(OnDealerTurnStarted));
+        _subscriptions.Add(_eventBus.Subscribe<DealerHit>(OnDealerHit));
+        _subscriptions.Add(_eventBus.Subscribe<DealerHoleCardRevealed>(OnDealerHoleCardRevealed));
+        _subscriptions.Add(_eventBus.Subscribe<DealerBusted>(OnDealerBusted));
+        _subscriptions.Add(_eventBus.Subscribe<DealerStood>(OnDealerStood));
+        _subscriptions.Add(_eventBus.Subscribe<InsuranceOffered>(OnInsuranceOffered));
+        _subscriptions.Add(_eventBus.Subscribe<InsuranceResult>(OnInsuranceResult));
+        _subscriptions.Add(_eventBus.Subscribe<HandResolved>(OnHandResolved));
+        _subscriptions.Add(_eventBus.Subscribe<RoundComplete>(OnRoundComplete));
 
         CalculatePositions();
 
@@ -203,12 +204,19 @@ internal class GameState : State
 
         _deckPosition = new Vector2(-_cardSize.X, vp.Height / 2f);
 
-        var maxButtonWidth = (vp.Width * 0.9f) / 3.3f;
-        var buttonSize = new Vector2(Math.Min(_cardSize.X * 1.35f, maxButtonWidth), _cardSize.Y * 0.35f);
         var centerX = vp.Width / 2f;
-        var gap = buttonSize.X * 0.58f;
-        var buttonY = GetPlayerCardsY() + _cardSize.Y + vp.Height / 18f + buttonSize.Y / 2f;
+        var buttonY = GetPlayerCardsY() + _cardSize.Y + vp.Height / 18f;
 
+        // Calculate button size to fit 5 action buttons in a single row
+        const int maxActionButtons = 5; // Hit, Stand, Split, Double, Surrender
+        const float buttonPadding = 12f; // Minimum gap between buttons
+        var availableWidth = vp.Width * 0.95f; // Use 95% of viewport width
+        var maxButtonWidth = (availableWidth - (buttonPadding * (maxActionButtons - 1))) / maxActionButtons;
+        var buttonWidth = Math.Min(_cardSize.X * 1.2f, maxButtonWidth);
+        var buttonHeight = _cardSize.Y * 0.35f;
+        var buttonSize = new Vector2(buttonWidth, buttonHeight);
+
+        // Set all button sizes
         _hitButton.Size = buttonSize;
         _standButton.Size = buttonSize;
         _splitButton.Size = buttonSize;
@@ -217,15 +225,21 @@ internal class GameState : State
         _insuranceButton.Size = buttonSize;
         _declineInsuranceButton.Size = buttonSize;
 
-        // Primary actions row: Hit | Split | Stand
-        _hitButton.Position = new Vector2(centerX - gap * 1.1f, buttonY);
-        _splitButton.Position = new Vector2(centerX, buttonY);
-        _standButton.Position = new Vector2(centerX + gap * 1.1f, buttonY);
-        var secondaryY = buttonY + buttonSize.Y + vp.Height / 80f;
-        _doubleButton.Position = new Vector2(centerX - gap * 0.8f, secondaryY);
-        _surrenderButton.Position = new Vector2(centerX + gap * 0.8f, secondaryY);
-        _insuranceButton.Position = new Vector2(centerX - gap, buttonY);
-        _declineInsuranceButton.Position = new Vector2(centerX + gap, buttonY);
+        // Single row layout for action buttons: Hit | Stand | Split | Double | Surrender
+        var totalRowWidth = (buttonWidth * maxActionButtons) + (buttonPadding * (maxActionButtons - 1));
+        var startX = centerX - (totalRowWidth / 2f) + (buttonWidth / 2f);
+
+        _hitButton.Position = new Vector2(startX, buttonY);
+        _standButton.Position = new Vector2(startX + (buttonWidth + buttonPadding), buttonY);
+        _splitButton.Position = new Vector2(startX + (buttonWidth + buttonPadding) * 2, buttonY);
+        _doubleButton.Position = new Vector2(startX + (buttonWidth + buttonPadding) * 3, buttonY);
+        _surrenderButton.Position = new Vector2(startX + (buttonWidth + buttonPadding) * 4, buttonY);
+
+        // Insurance buttons (shown only during insurance offer, centered)
+        var insuranceTotalWidth = (buttonWidth * 2) + buttonPadding;
+        var insuranceStartX = centerX - (insuranceTotalWidth / 2f) + (buttonWidth / 2f);
+        _insuranceButton.Position = new Vector2(insuranceStartX, buttonY);
+        _declineInsuranceButton.Position = new Vector2(insuranceStartX + buttonWidth + buttonPadding, buttonY);
 
         // Betting phase layout
         var arrowSize = new Vector2(buttonSize.Y * 1.2f, buttonSize.Y);
@@ -242,12 +256,14 @@ internal class GameState : State
         _repeatBetButton.Size = buttonSize;
         _repeatBetButton.Position = new Vector2(centerX, betCenterY + buttonSize.Y * 2.8f);
 
-        // Bankrupt phase layout
+        // Bankrupt phase layout - two buttons centered
         _resetBankrollButton.Size = buttonSize;
         _menuButton.Size = buttonSize;
         var bankruptY = vp.Height * 0.55f;
-        _resetBankrollButton.Position = new Vector2(centerX - gap * 0.8f, bankruptY);
-        _menuButton.Position = new Vector2(centerX + gap * 0.8f, bankruptY);
+        var bankruptTotalWidth = (buttonWidth * 2) + buttonPadding;
+        var bankruptStartX = centerX - (bankruptTotalWidth / 2f) + (buttonWidth / 2f);
+        _resetBankrollButton.Position = new Vector2(bankruptStartX, bankruptY);
+        _menuButton.Position = new Vector2(bankruptStartX + buttonWidth + buttonPadding, bankruptY);
     }
 
     private float GetDealerCardsY()
@@ -873,6 +889,7 @@ internal class GameState : State
         {
             spriteBatch.Begin();
             if (isBettingMode) DrawHud(spriteBatch, vp);
+            DrawHandValues(spriteBatch);
             _hitButton.Draw(gameTime, spriteBatch);
             _standButton.Draw(gameTime, spriteBatch);
             if (_round.CanSplit())
@@ -892,6 +909,7 @@ internal class GameState : State
         {
             spriteBatch.Begin();
             if (isBettingMode) DrawHud(spriteBatch, vp);
+            DrawHandValues(spriteBatch);
             _insuranceButton.Draw(gameTime, spriteBatch);
             _declineInsuranceButton.Draw(gameTime, spriteBatch);
             spriteBatch.End();
@@ -901,6 +919,7 @@ internal class GameState : State
             // Draw HUD during dealer turn / resolution too
             spriteBatch.Begin();
             DrawHud(spriteBatch, vp);
+            DrawHandValues(spriteBatch);
             spriteBatch.End();
         }
     }
@@ -916,6 +935,68 @@ internal class GameState : State
             var betText = $"Bet: ${_lastBet}";
             var betSize = _font.MeasureString(betText) * 0.7f;
             spriteBatch.DrawString(_font, betText, new Vector2(vp.Width - betSize.X - 12f, 8f), Color.Gold, 0f, Vector2.Zero, 0.7f, SpriteEffects.None, 0f);
+        }
+    }
+
+    private void DrawHandValues(SpriteBatch spriteBatch)
+    {
+        if (_round == null! || _gamePhase != GamePhase.Playing)
+            return;
+
+        var vp = _graphicsDevice.Viewport;
+        const float scale = 0.9f;
+
+        // Draw dealer hand value (only show upcard value before dealer turn)
+        if (_dealerCardCount > 0)
+        {
+            string dealerValueText;
+            if (_round.Phase == RoundPhase.DealerTurn || _round.Phase == RoundPhase.Resolution || _round.Phase == RoundPhase.Complete)
+            {
+                // Show full dealer hand value
+                int dealerValue = _dealer.Hand.Value;
+                bool dealerSoft = _dealer.Hand.IsSoft;
+                dealerValueText = dealerSoft ? $"{dealerValue} (soft)" : $"{dealerValue}";
+            }
+            else
+            {
+                // Show only upcard value
+                dealerValueText = "?";
+            }
+
+            var dealerTextSize = _font.MeasureString(dealerValueText) * scale;
+            var dealerY = GetDealerCardsY() - dealerTextSize.Y - 8f;
+            var dealerX = vp.Width / 2f - dealerTextSize.X / 2f;
+            spriteBatch.DrawString(_font, dealerValueText, new Vector2(dealerX, dealerY), Color.White, 0f, Vector2.Zero, scale, SpriteEffects.None, 0f);
+        }
+
+        // Draw player hand values
+        int handCount = GetPlayerHandCount();
+        for (int h = 0; h < handCount; h++)
+        {
+            if (h >= _player.Hands.Count)
+                continue;
+
+            var hand = _player.Hands[h];
+            int handValue = hand.Value;
+            bool isSoft = hand.IsSoft;
+            bool isBusted = _bustedHands.Contains(h);
+
+            string valueText = isBusted ? "BUST" : (isSoft ? $"{handValue} (soft)" : $"{handValue}");
+            Color valueColor = isBusted ? Color.Red : (h == _activePlayerHandIndex ? Color.Gold : Color.LightGray);
+
+            var textSize = _font.MeasureString(valueText) * scale;
+
+            // Position below the hand
+            int cardCount = _playerHandCardCounts.GetValueOrDefault(h, 2);
+            Vector2 firstCardPos = GetCardTargetPosition(_player.Name, h, 0);
+            Vector2 lastCardPos = GetCardTargetPosition(_player.Name, h, cardCount - 1);
+            float handCenterX = (firstCardPos.X + lastCardPos.X) / 2f;
+            float handBottom = GetPlayerCardsY() + _cardSize.Y;
+
+            var textX = handCenterX - textSize.X / 2f;
+            var textY = handBottom + 8f;
+
+            spriteBatch.DrawString(_font, valueText, new Vector2(textX, textY), valueColor, 0f, Vector2.Zero, scale, SpriteEffects.None, 0f);
         }
     }
 
@@ -965,6 +1046,14 @@ internal class GameState : State
 
     public override void Dispose()
     {
+        // Unsubscribe all event handlers to prevent memory leaks
+        foreach (var subscription in _subscriptions)
+            subscription.Dispose();
+        _subscriptions.Clear();
+
+        // Dispose StatsRecorder (which also unsubscribes its handlers)
+        _statsRecorder.Dispose();
+
         _eventBus.Clear();
         _tweenManager.Clear();
         _cardLayer.Clear();
