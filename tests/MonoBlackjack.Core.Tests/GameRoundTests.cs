@@ -5,17 +5,17 @@ using MonoBlackjack.Core.Players;
 
 namespace MonoBlackjack.Core.Tests;
 
-[Collection("GameConfig")]
 public class GameRoundTests
 {
     private readonly List<GameEvent> _events = [];
 
-    private GameRound CreateRound(int seed = 42)
+    private GameRound CreateRound(int seed = 42, GameRules? rules = null)
     {
-        var shoe = new Shoe(1, new Random(seed));
-        var player = new Human();
-        var dealer = new Dealer();
-        return new GameRound(shoe, player, dealer, e => _events.Add(e));
+        rules ??= GameRules.Standard;
+        var shoe = new Shoe(rules.NumberOfDecks, rules.PenetrationPercent, rules.UseCryptographicShuffle, new Random(seed));
+        var player = new Human("Player", rules.StartingBank);
+        var dealer = new Dealer(rules.DealerHitsSoft17);
+        return new GameRound(shoe, player, dealer, rules, e => _events.Add(e));
     }
 
     [Fact]
@@ -46,58 +46,40 @@ public class GameRoundTests
     [Fact]
     public void Deal_WhenCutCardReached_ReshufflesAndPublishesShoeEvents()
     {
-        var originalPenetration = GameConfig.PenetrationPercent;
-        try
-        {
-            GameConfig.PenetrationPercent = 75;
+        var rules = GameRules.Standard with { PenetrationPercent = 75, NumberOfDecks = 1 };
+        var shoe = new Shoe(rules.NumberOfDecks, rules.PenetrationPercent, rules.UseCryptographicShuffle, new Random(42));
+        while (shoe.Remaining > shoe.CutCardRemainingThreshold)
+            shoe.Draw();
 
-            var shoe = new Shoe(1, new Random(42));
-            while (shoe.Remaining > shoe.CutCardRemainingThreshold)
-                shoe.Draw();
+        var player = new Human("Player", rules.StartingBank);
+        var dealer = new Dealer(rules.DealerHitsSoft17);
+        var round = new GameRound(shoe, player, dealer, rules, e => _events.Add(e));
 
-            var player = new Human();
-            var dealer = new Dealer();
-            var round = new GameRound(shoe, player, dealer, e => _events.Add(e));
+        round.PlaceBet(rules.MinimumBet);
+        round.Deal();
 
-            round.PlaceBet(GameConfig.MinimumBet);
-            round.Deal();
+        var cutCardReached = _events.OfType<ShoeCutCardReached>().Single();
+        cutCardReached.CardsRemaining.Should().Be(13);
+        cutCardReached.CutCardRemainingThreshold.Should().Be(13);
 
-            var cutCardReached = _events.OfType<ShoeCutCardReached>().Single();
-            cutCardReached.CardsRemaining.Should().Be(13);
-            cutCardReached.CutCardRemainingThreshold.Should().Be(13);
+        var reshuffled = _events.OfType<ShoeReshuffled>().Single();
+        reshuffled.DeckCount.Should().Be(1);
+        reshuffled.CardsRemaining.Should().Be(52);
+        reshuffled.CutCardRemainingThreshold.Should().Be(13);
 
-            var reshuffled = _events.OfType<ShoeReshuffled>().Single();
-            reshuffled.DeckCount.Should().Be(1);
-            reshuffled.CardsRemaining.Should().Be(52);
-            reshuffled.CutCardRemainingThreshold.Should().Be(13);
-
-            shoe.Remaining.Should().Be(48);
-        }
-        finally
-        {
-            GameConfig.PenetrationPercent = originalPenetration;
-        }
+        shoe.Remaining.Should().Be(48);
     }
 
     [Fact]
     public void Deal_WhenCutCardNotReached_DoesNotPublishShoeEvents()
     {
-        var originalPenetration = GameConfig.PenetrationPercent;
-        try
-        {
-            GameConfig.PenetrationPercent = 75;
-            var round = CreateRound(seed: 123);
+        var round = CreateRound(seed: 123, rules: GameRules.Standard with { PenetrationPercent = 75 });
 
-            round.PlaceBet(GameConfig.MinimumBet);
-            round.Deal();
+        round.PlaceBet(GameRules.Standard.MinimumBet);
+        round.Deal();
 
-            _events.Should().NotContain(e => e is ShoeCutCardReached);
-            _events.Should().NotContain(e => e is ShoeReshuffled);
-        }
-        finally
-        {
-            GameConfig.PenetrationPercent = originalPenetration;
-        }
+        _events.Should().NotContain(e => e is ShoeCutCardReached);
+        _events.Should().NotContain(e => e is ShoeReshuffled);
     }
 
     [Fact]
@@ -139,7 +121,7 @@ public class GameRoundTests
         round.PlaceBet(1); // Below minimum of 5
 
         var bet = _events.OfType<BetPlaced>().Single();
-        bet.Amount.Should().Be(GameConfig.MinimumBet);
+        bet.Amount.Should().Be(GameRules.Standard.MinimumBet);
     }
 
     [Fact]
@@ -231,207 +213,171 @@ public class GameRoundTests
     [Fact]
     public void CanDoubleDown_TenToElevenRestriction_AllowsTenOrEleven()
     {
-        var originalRestriction = GameConfig.DoubleDownRestriction;
-        try
+        var rules = GameRules.Standard with
         {
-            GameConfig.DoubleDownRestriction = DoubleDownRestriction.TenToEleven;
+            DoubleDownRestriction = DoubleDownRestriction.TenToEleven,
+            NumberOfDecks = 1,
+            StartingBank = 10000m
+        };
 
-            for (int seed = 0; seed < 5000; seed++)
-            {
-                _events.Clear();
-                var shoe = new Shoe(1, new Random(seed));
-                var player = new Human(startingBank: 10000);
-                var dealer = new Dealer();
-                var round = new GameRound(shoe, player, dealer, e => _events.Add(e));
-
-                round.PlaceBet(GameConfig.MinimumBet);
-                round.Deal();
-
-                if (round.Phase != RoundPhase.PlayerTurn)
-                    continue;
-
-                var value = player.Hands[0].Value;
-                if (value is not (10 or 11))
-                    continue;
-
-                round.CanDoubleDown().Should().BeTrue();
-                return;
-            }
-
-            throw new InvalidOperationException("Could not find an opening hand totaling 10 or 11.");
-        }
-        finally
+        for (int seed = 0; seed < 5000; seed++)
         {
-            GameConfig.DoubleDownRestriction = originalRestriction;
+            _events.Clear();
+            var shoe = new Shoe(rules.NumberOfDecks, rules.PenetrationPercent, rules.UseCryptographicShuffle, new Random(seed));
+            var player = new Human("Player", rules.StartingBank);
+            var dealer = new Dealer(rules.DealerHitsSoft17);
+            var round = new GameRound(shoe, player, dealer, rules, e => _events.Add(e));
+
+            round.PlaceBet(rules.MinimumBet);
+            round.Deal();
+
+            if (round.Phase != RoundPhase.PlayerTurn)
+                continue;
+
+            var value = player.Hands[0].Value;
+            if (value is not (10 or 11))
+                continue;
+
+            round.CanDoubleDown().Should().BeTrue();
+            return;
         }
+
+        throw new InvalidOperationException("Could not find an opening hand totaling 10 or 11.");
     }
 
     [Fact]
     public void CanDoubleDown_TenToElevenRestriction_BlocksOtherTotals()
     {
-        var originalRestriction = GameConfig.DoubleDownRestriction;
-        try
+        var rules = GameRules.Standard with
         {
-            GameConfig.DoubleDownRestriction = DoubleDownRestriction.TenToEleven;
+            DoubleDownRestriction = DoubleDownRestriction.TenToEleven,
+            NumberOfDecks = 1,
+            StartingBank = 10000m
+        };
 
-            for (int seed = 0; seed < 5000; seed++)
-            {
-                _events.Clear();
-                var shoe = new Shoe(1, new Random(seed));
-                var player = new Human(startingBank: 10000);
-                var dealer = new Dealer();
-                var round = new GameRound(shoe, player, dealer, e => _events.Add(e));
-
-                round.PlaceBet(GameConfig.MinimumBet);
-                round.Deal();
-
-                if (round.Phase != RoundPhase.PlayerTurn)
-                    continue;
-
-                var value = player.Hands[0].Value;
-                if (value is 10 or 11)
-                    continue;
-
-                round.CanDoubleDown().Should().BeFalse();
-                return;
-            }
-
-            throw new InvalidOperationException("Could not find an opening hand outside 10 or 11.");
-        }
-        finally
+        for (int seed = 0; seed < 5000; seed++)
         {
-            GameConfig.DoubleDownRestriction = originalRestriction;
+            _events.Clear();
+            var shoe = new Shoe(rules.NumberOfDecks, rules.PenetrationPercent, rules.UseCryptographicShuffle, new Random(seed));
+            var player = new Human("Player", rules.StartingBank);
+            var dealer = new Dealer(rules.DealerHitsSoft17);
+            var round = new GameRound(shoe, player, dealer, rules, e => _events.Add(e));
+
+            round.PlaceBet(rules.MinimumBet);
+            round.Deal();
+
+            if (round.Phase != RoundPhase.PlayerTurn)
+                continue;
+
+            var value = player.Hands[0].Value;
+            if (value is 10 or 11)
+                continue;
+
+            round.CanDoubleDown().Should().BeFalse();
+            return;
         }
+
+        throw new InvalidOperationException("Could not find an opening hand outside 10 or 11.");
     }
 
     [Fact]
     public void PlayerSurrender_HalvesBetAndCompletes()
     {
-        var originalLateSurrender = GameConfig.AllowLateSurrender;
-        var originalEarlySurrender = GameConfig.AllowEarlySurrender;
-        try
+        var rules = GameRules.Standard with
         {
-            GameConfig.AllowLateSurrender = true;
-            GameConfig.AllowEarlySurrender = false;
+            AllowLateSurrender = true,
+            AllowEarlySurrender = false,
+            NumberOfDecks = 1,
+            StartingBank = 1000m
+        };
 
-            var shoe = new Shoe(1, new Random(42));
-            var player = new Human(startingBank: 1000);
-            var dealer = new Dealer();
-            var round = new GameRound(shoe, player, dealer, e => _events.Add(e));
+        var shoe = new Shoe(rules.NumberOfDecks, rules.PenetrationPercent, rules.UseCryptographicShuffle, new Random(42));
+        var player = new Human("Player", rules.StartingBank);
+        var dealer = new Dealer(rules.DealerHitsSoft17);
+        var round = new GameRound(shoe, player, dealer, rules, e => _events.Add(e));
 
-            round.PlaceBet(100);
-            round.Deal();
+        round.PlaceBet(100);
+        round.Deal();
 
-            if (round.Phase != RoundPhase.PlayerTurn)
-                return;
+        if (round.Phase != RoundPhase.PlayerTurn)
+            return;
 
-            var bankBefore = player.Bank;
-            round.PlayerSurrender();
+        round.PlayerSurrender();
 
-            _events.Should().Contain(e => e is PlayerSurrendered);
-            var resolved = _events.OfType<HandResolved>().Last();
-            resolved.Outcome.Should().Be(HandOutcome.Surrender);
-            resolved.Payout.Should().Be(-50);
-            round.Phase.Should().Be(RoundPhase.Complete);
-        }
-        finally
-        {
-            GameConfig.AllowLateSurrender = originalLateSurrender;
-            GameConfig.AllowEarlySurrender = originalEarlySurrender;
-        }
+        _events.Should().Contain(e => e is PlayerSurrendered);
+        var resolved = _events.OfType<HandResolved>().Last();
+        resolved.Outcome.Should().Be(HandOutcome.Surrender);
+        resolved.Payout.Should().Be(-50);
+        round.Phase.Should().Be(RoundPhase.Complete);
     }
 
     [Fact]
     public void PlayerSurrender_WithOddMinimumBet_KeepsFractionalBankroll()
     {
-        var originalMinimum = GameConfig.MinimumBet;
-        var originalLateSurrender = GameConfig.AllowLateSurrender;
-        var originalEarlySurrender = GameConfig.AllowEarlySurrender;
-        try
+        var rules = GameRules.Standard with
         {
-            GameConfig.MinimumBet = 5m;
-            GameConfig.AllowLateSurrender = true;
-            GameConfig.AllowEarlySurrender = false;
-            var (round, player) = CreatePlayableRound(startingBank: 1000, seedStart: 100);
-            var bankBefore = player.Bank;
+            MinimumBet = 5m,
+            AllowLateSurrender = true,
+            AllowEarlySurrender = false
+        };
 
-            round.PlayerSurrender();
+        var (round, player) = CreatePlayableRound(startingBank: 1000, seedStart: 100, rules);
+        var bankBefore = player.Bank;
 
-            player.Bank.Should().Be(bankBefore - 2.5m);
-            _events.OfType<HandResolved>().Last().Payout.Should().Be(-2.5m);
-        }
-        finally
-        {
-            GameConfig.MinimumBet = originalMinimum;
-            GameConfig.AllowLateSurrender = originalLateSurrender;
-            GameConfig.AllowEarlySurrender = originalEarlySurrender;
-        }
+        round.PlayerSurrender();
+
+        player.Bank.Should().Be(bankBefore - 2.5m);
+        _events.OfType<HandResolved>().Last().Payout.Should().Be(-2.5m);
     }
 
     [Fact]
     public void PlayerSurrender_WhenSurrenderDisabled_Throws()
     {
-        var originalLateSurrender = GameConfig.AllowLateSurrender;
-        var originalEarlySurrender = GameConfig.AllowEarlySurrender;
-        try
-        {
-            GameConfig.AllowLateSurrender = false;
-            GameConfig.AllowEarlySurrender = false;
-            var (round, _) = CreatePlayableRound();
+        var rules = GameRules.Standard with { AllowLateSurrender = false, AllowEarlySurrender = false };
+        var (round, _) = CreatePlayableRound(rules: rules);
 
-            var act = () => round.PlayerSurrender();
-            act.Should().Throw<InvalidOperationException>()
-                .WithMessage("*surrender*rules*");
-        }
-        finally
-        {
-            GameConfig.AllowLateSurrender = originalLateSurrender;
-            GameConfig.AllowEarlySurrender = originalEarlySurrender;
-        }
+        var act = () => round.PlayerSurrender();
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*surrender*rules*");
     }
 
     [Fact]
     public void PlayerSurrender_AfterHit_Throws()
     {
-        var originalLateSurrender = GameConfig.AllowLateSurrender;
-        var originalEarlySurrender = GameConfig.AllowEarlySurrender;
-        try
+        var rules = GameRules.Standard with
         {
-            GameConfig.AllowLateSurrender = true;
-            GameConfig.AllowEarlySurrender = false;
+            AllowLateSurrender = true,
+            AllowEarlySurrender = false,
+            NumberOfDecks = 1,
+            StartingBank = 10000m
+        };
 
-            for (int seed = 0; seed < 5000; seed++)
-            {
-                _events.Clear();
-                var shoe = new Shoe(1, new Random(seed));
-                var player = new Human(startingBank: 10000);
-                var dealer = new Dealer();
-                var round = new GameRound(shoe, player, dealer, e => _events.Add(e));
-
-                round.PlaceBet(GameConfig.MinimumBet);
-                round.Deal();
-
-                if (round.Phase != RoundPhase.PlayerTurn)
-                    continue;
-
-                round.PlayerHit();
-
-                if (round.Phase != RoundPhase.PlayerTurn)
-                    continue;
-
-                var act = () => round.PlayerSurrender();
-                act.Should().Throw<InvalidOperationException>()
-                    .WithMessage("*surrender*");
-                return;
-            }
-
-            throw new InvalidOperationException("Could not find a round where surrender after hit can be validated.");
-        }
-        finally
+        for (int seed = 0; seed < 5000; seed++)
         {
-            GameConfig.AllowLateSurrender = originalLateSurrender;
-            GameConfig.AllowEarlySurrender = originalEarlySurrender;
+            _events.Clear();
+            var shoe = new Shoe(rules.NumberOfDecks, rules.PenetrationPercent, rules.UseCryptographicShuffle, new Random(seed));
+            var player = new Human("Player", rules.StartingBank);
+            var dealer = new Dealer(rules.DealerHitsSoft17);
+            var round = new GameRound(shoe, player, dealer, rules, e => _events.Add(e));
+
+            round.PlaceBet(rules.MinimumBet);
+            round.Deal();
+
+            if (round.Phase != RoundPhase.PlayerTurn)
+                continue;
+
+            round.PlayerHit();
+
+            if (round.Phase != RoundPhase.PlayerTurn)
+                continue;
+
+            var act = () => round.PlayerSurrender();
+            act.Should().Throw<InvalidOperationException>()
+                .WithMessage("*surrender*");
+            return;
         }
+
+        throw new InvalidOperationException("Could not find a round where surrender after hit can be validated.");
     }
 
     [Fact]
@@ -455,10 +401,10 @@ public class GameRoundTests
     public void HitUntilBust_PublishesBustedAndResolves()
     {
         // Use a seed and keep hitting until bust to verify the bust flow
-        var shoe = new Shoe(6, new Random(99));
-        var player = new Human();
-        var dealer = new Dealer();
-        var round = new GameRound(shoe, player, dealer, e => _events.Add(e));
+        var shoe = new Shoe(6, 75, false, new Random(99));
+        var player = new Human("Player", 1000m);
+        var dealer = new Dealer(false);
+        var round = new GameRound(shoe, player, dealer, GameRules.Standard, e => _events.Add(e));
 
         round.PlaceBet(10);
         round.Deal();
@@ -490,10 +436,10 @@ public class GameRoundTests
         for (int seed = 0; seed < 100; seed++)
         {
             var events = new List<GameEvent>();
-            var shoe = new Shoe(1, new Random(seed));
-            var player = new Human();
-            var dealer = new Dealer();
-            var round = new GameRound(shoe, player, dealer, e => events.Add(e));
+            var shoe = new Shoe(1, 75, false, new Random(seed));
+            var player = new Human("Player", 1000m);
+            var dealer = new Dealer(false);
+            var round = new GameRound(shoe, player, dealer, GameRules.Standard, e => events.Add(e));
 
             round.PlaceBet(10);
             round.Deal();
@@ -521,10 +467,10 @@ public class GameRoundTests
         for (int seed = 0; seed < 200; seed++)
         {
             var events = new List<GameEvent>();
-            var shoe = new Shoe(1, new Random(seed));
-            var player = new Human();
-            var dealer = new Dealer();
-            var round = new GameRound(shoe, player, dealer, e => events.Add(e));
+            var shoe = new Shoe(1, 75, false, new Random(seed));
+            var player = new Human("Player", 1000m);
+            var dealer = new Dealer(false);
+            var round = new GameRound(shoe, player, dealer, GameRules.Standard, e => events.Add(e));
 
             round.PlaceBet(10);
             round.Deal();
@@ -555,7 +501,7 @@ public class GameRoundTests
         round.Phase.Should().Be(RoundPhase.Insurance);
         _events.Should().ContainSingle(e => e is InsuranceOffered);
         var offered = _events.OfType<InsuranceOffered>().Single();
-        offered.MaxInsuranceBet.Should().Be(GameConfig.MinimumBet / 2);
+        offered.MaxInsuranceBet.Should().Be(GameRules.Standard.MinimumBet / 2);
     }
 
     [Fact]
@@ -593,7 +539,7 @@ public class GameRoundTests
         _events.Should().Contain(e => e is InsurancePlaced);
         var result = _events.OfType<InsuranceResult>().Single();
         result.DealerHadBlackjack.Should().BeTrue();
-        result.Payout.Should().Be(GameConfig.MinimumBet / 2 * GameConfig.InsurancePayout);
+        result.Payout.Should().Be(GameRules.Standard.MinimumBet / 2 * GameConfig.InsurancePayout);
 
         round.Phase.Should().Be(RoundPhase.Complete);
     }
@@ -609,11 +555,11 @@ public class GameRoundTests
 
         var result = _events.OfType<InsuranceResult>().Single();
         result.DealerHadBlackjack.Should().BeFalse();
-        result.Payout.Should().Be(-(GameConfig.MinimumBet / 2));
+        result.Payout.Should().Be(-(GameRules.Standard.MinimumBet / 2));
 
         // Player should continue to PlayerTurn
         round.Phase.Should().Be(RoundPhase.PlayerTurn);
-        player.Bank.Should().Be(bankBefore - GameConfig.MinimumBet / 2);
+        player.Bank.Should().Be(bankBefore - GameRules.Standard.MinimumBet / 2);
     }
 
     [Fact]
@@ -681,16 +627,18 @@ public class GameRoundTests
     [Fact]
     public void Deal_DealerLowUpcard_NoPeekEvent()
     {
+        var rules = GameRules.Standard with { NumberOfDecks = 1, StartingBank = 1000m };
+
         // Dealer upcard 2-9 (not Ace, not 10-value): no peek, no insurance
         for (int seed = 0; seed < 500; seed++)
         {
             var events = new List<GameEvent>();
-            var shoe = new Shoe(1, new Random(seed));
-            var player = new Human();
-            var dealer = new Dealer();
-            var round = new GameRound(shoe, player, dealer, e => events.Add(e));
+            var shoe = new Shoe(rules.NumberOfDecks, rules.PenetrationPercent, rules.UseCryptographicShuffle, new Random(seed));
+            var player = new Human("Player", rules.StartingBank);
+            var dealer = new Dealer(rules.DealerHitsSoft17);
+            var round = new GameRound(shoe, player, dealer, rules, e => events.Add(e));
 
-            round.PlaceBet(GameConfig.MinimumBet);
+            round.PlaceBet(rules.MinimumBet);
             round.Deal();
 
             var dealerUpcard = dealer.Hand.Cards[0];
@@ -739,25 +687,25 @@ public class GameRoundTests
         // Each hand should have the original bet amount as basis
         foreach (var r in resolved)
         {
-            Math.Abs(r.Payout).Should().BeOneOf(0, GameConfig.MinimumBet);
+            Math.Abs(r.Payout).Should().BeOneOf(0, GameRules.Standard.MinimumBet);
         }
     }
 
     [Fact]
     public void CanSplit_FalseForNonPair()
     {
-        var (round, _) = CreatePlayableRound();
+        var rules = GameRules.Standard with { NumberOfDecks = 6, StartingBank = 10000m };
 
         // Most hands won't be pairs
         // Try many seeds to find a non-pair
         for (int seed = 0; seed < 500; seed++)
         {
             _events.Clear();
-            var shoe = new Shoe(6, new Random(seed));
-            var player = new Human(startingBank: 10000);
-            var dealer = new Dealer();
-            var r = new GameRound(shoe, player, dealer, e => _events.Add(e));
-            r.PlaceBet(GameConfig.MinimumBet);
+            var shoe = new Shoe(rules.NumberOfDecks, rules.PenetrationPercent, rules.UseCryptographicShuffle, new Random(seed));
+            var player = new Human("Player", rules.StartingBank);
+            var dealer = new Dealer(rules.DealerHitsSoft17);
+            var r = new GameRound(shoe, player, dealer, rules, e => _events.Add(e));
+            r.PlaceBet(rules.MinimumBet);
             r.Deal();
 
             if (r.Phase != RoundPhase.PlayerTurn)
@@ -774,20 +722,12 @@ public class GameRoundTests
     [Fact]
     public void CanSplit_FalseAtMaxSplits()
     {
-        var originalMaxSplits = GameConfig.MaxSplits;
-        try
-        {
-            GameConfig.MaxSplits = 1;
-            var (round, player) = CreateSplittableRound(startingBank: 100000);
+        var rules = GameRules.Standard with { MaxSplits = 1 };
+        var (round, _) = CreateSplittableRound(startingBank: 100000, rules: rules);
 
-            round.PlayerSplit();
-            // After one split with MaxSplits=1, CanSplit should be false even if hand is a pair
-            round.CanSplit().Should().BeFalse();
-        }
-        finally
-        {
-            GameConfig.MaxSplits = originalMaxSplits;
-        }
+        round.PlayerSplit();
+        // After one split with MaxSplits=1, CanSplit should be false even if hand is a pair
+        round.CanSplit().Should().BeFalse();
     }
 
     [Fact]
@@ -811,102 +751,85 @@ public class GameRoundTests
     [Fact]
     public void CanSplit_ResplitAcesDisabled()
     {
-        var originalResplit = GameConfig.ResplitAces;
-        try
+        var rules = GameRules.Standard with
         {
-            GameConfig.ResplitAces = false;
+            ResplitAces = false,
+            NumberOfDecks = 6,
+            StartingBank = 100000m
+        };
 
-            // Find a seed that gives us aces, split them, and get another ace
-            // This is hard to find deterministically, so we test the logic directly
-            for (int seed = 0; seed < 10000; seed++)
-            {
-                _events.Clear();
-                var shoe = new Shoe(6, new Random(seed));
-                var player = new Human(startingBank: 100000);
-                var dealer = new Dealer();
-                var round = new GameRound(shoe, player, dealer, e => _events.Add(e));
-                round.PlaceBet(GameConfig.MinimumBet);
-                round.Deal();
-
-                if (round.Phase != RoundPhase.PlayerTurn)
-                    continue;
-
-                var hand = player.Hands[0];
-                if (hand.Cards[0].Rank != Rank.Ace || hand.Cards[1].Rank != Rank.Ace)
-                    continue;
-
-                // Split the aces - they auto-stand, so we can't check CanSplit after
-                // Instead, verify the auto-stand behavior means no resplit opportunity
-                round.PlayerSplit();
-                // Auto-stood, round completed, no chance to resplit
-                round.Phase.Should().Be(RoundPhase.Complete);
-                return;
-            }
-
-            // If we couldn't find ace pair, that's ok - the unit test for CanSplit logic covers it
-        }
-        finally
+        // Find a seed that gives us aces, split them, and get another ace
+        // This is hard to find deterministically, so we test the logic directly
+        for (int seed = 0; seed < 10000; seed++)
         {
-            GameConfig.ResplitAces = originalResplit;
+            _events.Clear();
+            var shoe = new Shoe(rules.NumberOfDecks, rules.PenetrationPercent, rules.UseCryptographicShuffle, new Random(seed));
+            var player = new Human("Player", rules.StartingBank);
+            var dealer = new Dealer(rules.DealerHitsSoft17);
+            var round = new GameRound(shoe, player, dealer, rules, e => _events.Add(e));
+            round.PlaceBet(rules.MinimumBet);
+            round.Deal();
+
+            if (round.Phase != RoundPhase.PlayerTurn)
+                continue;
+
+            var hand = player.Hands[0];
+            if (hand.Cards[0].Rank != Rank.Ace || hand.Cards[1].Rank != Rank.Ace)
+                continue;
+
+            // Split the aces - they auto-stand, so we can't check CanSplit after
+            // Instead, verify the auto-stand behavior means no resplit opportunity
+            round.PlayerSplit();
+            // Auto-stood, round completed, no chance to resplit
+            round.Phase.Should().Be(RoundPhase.Complete);
+            return;
         }
+
+        // If we couldn't find ace pair, that's ok - the unit test for CanSplit logic covers it
     }
 
     [Fact]
     public void PlayerSplit_DoubleAfterSplit()
     {
-        var originalDAS = GameConfig.DoubleAfterSplit;
-        try
-        {
-            GameConfig.DoubleAfterSplit = true;
-            // Find a splittable non-ace pair
-            var (round, player) = CreateSplittableRound(startingBank: 100000, excludeAces: true);
+        var rules = GameRules.Standard with { DoubleAfterSplit = true };
+        // Find a splittable non-ace pair
+        var (round, _) = CreateSplittableRound(startingBank: 100000, excludeAces: true, rules: rules);
 
-            round.PlayerSplit();
+        round.PlayerSplit();
 
-            // After split, should be in PlayerTurn for first hand
-            round.Phase.Should().Be(RoundPhase.PlayerTurn);
+        // After split, should be in PlayerTurn for first hand
+        round.Phase.Should().Be(RoundPhase.PlayerTurn);
 
-            // CanDoubleDown should be true (2 cards in hand, DAS enabled)
-            round.CanDoubleDown().Should().BeTrue();
-        }
-        finally
-        {
-            GameConfig.DoubleAfterSplit = originalDAS;
-        }
+        // CanDoubleDown should be true (2 cards in hand, DAS enabled)
+        round.CanDoubleDown().Should().BeTrue();
     }
 
     [Fact]
     public void PlayerSplit_DoubleAfterSplitDisabled()
     {
-        var originalDAS = GameConfig.DoubleAfterSplit;
-        try
-        {
-            GameConfig.DoubleAfterSplit = false;
-            var (round, player) = CreateSplittableRound(startingBank: 100000, excludeAces: true);
+        var rules = GameRules.Standard with { DoubleAfterSplit = false };
+        var (round, _) = CreateSplittableRound(startingBank: 100000, excludeAces: true, rules: rules);
 
-            round.PlayerSplit();
+        round.PlayerSplit();
 
-            round.Phase.Should().Be(RoundPhase.PlayerTurn);
-            round.CanDoubleDown().Should().BeFalse();
-        }
-        finally
-        {
-            GameConfig.DoubleAfterSplit = originalDAS;
-        }
+        round.Phase.Should().Be(RoundPhase.PlayerTurn);
+        round.CanDoubleDown().Should().BeFalse();
     }
 
     [Fact]
     public void PlayerSplit_21IsNotBlackjack()
     {
+        var rules = GameRules.Standard with { NumberOfDecks = 6, StartingBank = 100000m };
+
         // Find a seed where splitting tens gives an ace on one hand
         for (int seed = 0; seed < 10000; seed++)
         {
             _events.Clear();
-            var shoe = new Shoe(6, new Random(seed));
-            var player = new Human(startingBank: 100000);
-            var dealer = new Dealer();
-            var round = new GameRound(shoe, player, dealer, e => _events.Add(e));
-            round.PlaceBet(GameConfig.MinimumBet);
+            var shoe = new Shoe(rules.NumberOfDecks, rules.PenetrationPercent, rules.UseCryptographicShuffle, new Random(seed));
+            var player = new Human("Player", rules.StartingBank);
+            var dealer = new Dealer(rules.DealerHitsSoft17);
+            var round = new GameRound(shoe, player, dealer, rules, e => _events.Add(e));
+            round.PlaceBet(rules.MinimumBet);
             round.Deal();
 
             if (round.Phase != RoundPhase.PlayerTurn)
@@ -938,15 +861,17 @@ public class GameRoundTests
     [Fact]
     public void PlayerSplit_IndependentResolution()
     {
+        var rules = GameRules.Standard with { NumberOfDecks = 6, StartingBank = 100000m };
+
         // Find a seed where we can split and one hand busts while other stands
         for (int seed = 0; seed < 5000; seed++)
         {
             _events.Clear();
-            var shoe = new Shoe(6, new Random(seed));
-            var player = new Human(startingBank: 100000);
-            var dealer = new Dealer();
-            var round = new GameRound(shoe, player, dealer, e => _events.Add(e));
-            round.PlaceBet(GameConfig.MinimumBet);
+            var shoe = new Shoe(rules.NumberOfDecks, rules.PenetrationPercent, rules.UseCryptographicShuffle, new Random(seed));
+            var player = new Human("Player", rules.StartingBank);
+            var dealer = new Dealer(rules.DealerHitsSoft17);
+            var round = new GameRound(shoe, player, dealer, rules, e => _events.Add(e));
+            round.PlaceBet(rules.MinimumBet);
             round.Deal();
 
             if (round.Phase != RoundPhase.PlayerTurn)
@@ -997,7 +922,7 @@ public class GameRoundTests
     [Fact]
     public void PlayerSurrender_BlockedAfterSplit()
     {
-        var (round, player) = CreateSplittableRound(excludeAces: true);
+        var (round, _) = CreateSplittableRound(excludeAces: true);
 
         round.PlayerSplit();
 
@@ -1009,7 +934,7 @@ public class GameRoundTests
     [Fact]
     public void PlayerSplit_HandAdvancement()
     {
-        var (round, player) = CreateSplittableRound(excludeAces: true);
+        var (round, _) = CreateSplittableRound(excludeAces: true);
 
         _events.Clear();
         round.PlayerSplit();
@@ -1035,17 +960,20 @@ public class GameRoundTests
         Rank upcardRank,
         bool? requireDealerBj = null,
         bool? requirePlayerBj = null,
+        GameRules? rules = null,
         int maxSeeds = 5000)
     {
+        rules ??= GameRules.Standard with { NumberOfDecks = 1, StartingBank = 10000m };
+
         for (int seed = 0; seed < maxSeeds; seed++)
         {
             _events.Clear();
-            var shoe = new Shoe(1, new Random(seed));
-            var player = new Human(startingBank: 10000);
-            var dealer = new Dealer();
-            var round = new GameRound(shoe, player, dealer, e => _events.Add(e));
+            var shoe = new Shoe(rules.NumberOfDecks, rules.PenetrationPercent, rules.UseCryptographicShuffle, new Random(seed));
+            var player = new Human("Player", rules.StartingBank);
+            var dealer = new Dealer(rules.DealerHitsSoft17);
+            var round = new GameRound(shoe, player, dealer, rules, e => _events.Add(e));
 
-            round.PlaceBet(GameConfig.MinimumBet);
+            round.PlaceBet(rules.MinimumBet);
             round.Deal();
 
             var dealerUpcard = dealer.Hand.Cards[0];
@@ -1066,16 +994,18 @@ public class GameRoundTests
             $"(dealerBj={requireDealerBj}, playerBj={requirePlayerBj}) within {maxSeeds} seeds.");
     }
 
-    private (GameRound Round, Human Player) CreatePlayableRound(int startingBank = 1000, int seedStart = 0, int maxSeeds = 300)
+    private (GameRound Round, Human Player) CreatePlayableRound(int startingBank = 1000, int seedStart = 0, GameRules? rules = null, int maxSeeds = 300)
     {
+        var effectiveRules = (rules ?? GameRules.Standard) with { NumberOfDecks = 1, StartingBank = startingBank };
+
         for (int seed = seedStart; seed < seedStart + maxSeeds; seed++)
         {
             _events.Clear();
-            var shoe = new Shoe(1, new Random(seed));
-            var player = new Human(startingBank: startingBank);
-            var dealer = new Dealer();
-            var round = new GameRound(shoe, player, dealer, e => _events.Add(e));
-            round.PlaceBet(GameConfig.MinimumBet);
+            var shoe = new Shoe(effectiveRules.NumberOfDecks, effectiveRules.PenetrationPercent, effectiveRules.UseCryptographicShuffle, new Random(seed));
+            var player = new Human("Player", effectiveRules.StartingBank);
+            var dealer = new Dealer(effectiveRules.DealerHitsSoft17);
+            var round = new GameRound(shoe, player, dealer, effectiveRules, e => _events.Add(e));
+            round.PlaceBet(effectiveRules.MinimumBet);
             round.Deal();
 
             if (round.Phase == RoundPhase.PlayerTurn)
@@ -1089,17 +1019,20 @@ public class GameRoundTests
         Rank? pairRank = null,
         int startingBank = 10000,
         bool excludeAces = false,
+        GameRules? rules = null,
         int seedStart = 0,
         int maxSeeds = 10000)
     {
+        var effectiveRules = (rules ?? GameRules.Standard) with { NumberOfDecks = 6, StartingBank = startingBank };
+
         for (int seed = seedStart; seed < seedStart + maxSeeds; seed++)
         {
             _events.Clear();
-            var shoe = new Shoe(6, new Random(seed));
-            var player = new Human(startingBank: startingBank);
-            var dealer = new Dealer();
-            var round = new GameRound(shoe, player, dealer, e => _events.Add(e));
-            round.PlaceBet(GameConfig.MinimumBet);
+            var shoe = new Shoe(effectiveRules.NumberOfDecks, effectiveRules.PenetrationPercent, effectiveRules.UseCryptographicShuffle, new Random(seed));
+            var player = new Human("Player", effectiveRules.StartingBank);
+            var dealer = new Dealer(effectiveRules.DealerHitsSoft17);
+            var round = new GameRound(shoe, player, dealer, effectiveRules, e => _events.Add(e));
+            round.PlaceBet(effectiveRules.MinimumBet);
             round.Deal();
 
             if (round.Phase != RoundPhase.PlayerTurn)

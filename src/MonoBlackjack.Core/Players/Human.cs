@@ -4,9 +4,9 @@ public class Human : PlayerBase
 {
     public decimal Bank { get; set; }
 
-    public Human(string name = "Player", decimal? startingBank = null)
+    public Human(string name, decimal startingBank)
         : base(name)
     {
-        Bank = startingBank ?? GameConfig.StartingBank;
+        Bank = startingBank;
     }
 }

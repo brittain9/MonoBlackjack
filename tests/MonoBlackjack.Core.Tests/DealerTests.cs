@@ -4,14 +4,13 @@ using MonoBlackjack.Core.Players;
 
 namespace MonoBlackjack.Core.Tests;
 
-[Collection("GameConfig")]
 public class DealerTests
 {
     [Fact]
     public void Dealer_PlayHand_HitsOn16()
     {
-        var dealer = new Dealer();
-        var shoe = new Shoe(1, new Random(42));
+        var dealer = new Dealer(false); // S17
+        var shoe = new Shoe(1, 75, false, new Random(42));
 
         dealer.Hand.AddCard(new Card(Rank.Ten, Suit.Hearts));
         dealer.Hand.AddCard(new Card(Rank.Six, Suit.Spades));
@@ -24,8 +23,8 @@ public class DealerTests
     [Fact]
     public void Dealer_PlayHand_StandsOn17()
     {
-        var dealer = new Dealer();
-        var shoe = new Shoe(1, new Random(42));
+        var dealer = new Dealer(false); // S17
+        var shoe = new Shoe(1, 75, false, new Random(42));
 
         dealer.Hand.AddCard(new Card(Rank.Ten, Suit.Hearts));
         dealer.Hand.AddCard(new Card(Rank.Seven, Suit.Spades));
@@ -40,66 +39,46 @@ public class DealerTests
     [Fact]
     public void Dealer_PlayHand_StandsOnSoft17_WhenConfigured()
     {
-        var originalSetting = GameConfig.DealerHitsSoft17;
-        try
-        {
-            GameConfig.DealerHitsSoft17 = false; // S17 rule
+        var dealer = new Dealer(false); // S17
+        var shoe = new Shoe(1, 75, false, new Random(42));
 
-            var dealer = new Dealer();
-            var shoe = new Shoe(1, new Random(42));
+        dealer.Hand.AddCard(new Card(Rank.Ace, Suit.Hearts));
+        dealer.Hand.AddCard(new Card(Rank.Six, Suit.Spades));
 
-            dealer.Hand.AddCard(new Card(Rank.Ace, Suit.Hearts));
-            dealer.Hand.AddCard(new Card(Rank.Six, Suit.Spades));
+        var cardCountBefore = dealer.Hand.Cards.Count;
+        dealer.PlayHand(shoe);
 
-            var cardCountBefore = dealer.Hand.Cards.Count;
-            dealer.PlayHand(shoe);
-
-            dealer.Hand.Value.Should().Be(17);
-            dealer.Hand.IsSoft.Should().BeTrue();
-            dealer.Hand.Cards.Count.Should().Be(cardCountBefore); // No new cards
-        }
-        finally
-        {
-            GameConfig.DealerHitsSoft17 = originalSetting;
-        }
+        dealer.Hand.Value.Should().Be(17);
+        dealer.Hand.IsSoft.Should().BeTrue();
+        dealer.Hand.Cards.Count.Should().Be(cardCountBefore); // No new cards
     }
 
     [Fact]
     public void Dealer_PlayHand_HitsOnSoft17_WhenConfigured()
     {
-        var originalSetting = GameConfig.DealerHitsSoft17;
-        try
-        {
-            GameConfig.DealerHitsSoft17 = true; // H17 rule
+        var dealer = new Dealer(true); // H17 rule
+        var shoe = new Shoe(1, 75, false, new Random(42));
 
-            var dealer = new Dealer();
-            var shoe = new Shoe(1, new Random(42));
+        dealer.Hand.AddCard(new Card(Rank.Ace, Suit.Hearts));
+        dealer.Hand.AddCard(new Card(Rank.Six, Suit.Spades));
 
-            dealer.Hand.AddCard(new Card(Rank.Ace, Suit.Hearts));
-            dealer.Hand.AddCard(new Card(Rank.Six, Suit.Spades));
+        dealer.PlayHand(shoe);
 
-            dealer.PlayHand(shoe);
-
-            // Should have drawn at least one more card
-            dealer.Hand.Cards.Count.Should().BeGreaterThan(2);
-        }
-        finally
-        {
-            GameConfig.DealerHitsSoft17 = originalSetting;
-        }
+        // Should have drawn at least one more card
+        dealer.Hand.Cards.Count.Should().BeGreaterThan(2);
     }
 
     [Fact]
     public void Dealer_PlayHand_StopsWhenBusted()
     {
-        var dealer = new Dealer();
+        var dealer = new Dealer(false); // S17
 
         // Manually create a hand that will bust
         dealer.Hand.AddCard(new Card(Rank.Ten, Suit.Hearts));
         dealer.Hand.AddCard(new Card(Rank.Nine, Suit.Spades));
         dealer.Hand.AddCard(new Card(Rank.Five, Suit.Diamonds));
 
-        var shoe = new Shoe(1, new Random(42));
+        var shoe = new Shoe(1, 75, false, new Random(42));
 
         dealer.PlayHand(shoe);
 
@@ -109,7 +88,7 @@ public class DealerTests
     [Fact]
     public void Dealer_ClearHand_RemovesAllCards()
     {
-        var dealer = new Dealer();
+        var dealer = new Dealer(false); // S17
         dealer.Hand.AddCard(new Card(Rank.King, Suit.Hearts));
         dealer.Hand.AddCard(new Card(Rank.Queen, Suit.Spades));
 

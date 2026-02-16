@@ -10,6 +10,7 @@ internal sealed class StatsRecorder : IDisposable
 {
     private readonly IStatsRepository _statsRepository;
     private readonly int _profileId;
+    private readonly GameRules _rules;
     private readonly List<CardSeenRecord> _cardsSeen = [];
     private readonly List<HandResultRecord> _handResults = [];
     private readonly List<TrackedDecision> _decisions = [];
@@ -24,10 +25,11 @@ internal sealed class StatsRecorder : IDisposable
     private bool _roundOpen;
     private bool _dealerBusted;
 
-    public StatsRecorder(EventBus eventBus, IStatsRepository statsRepository, int profileId)
+    public StatsRecorder(EventBus eventBus, IStatsRepository statsRepository, int profileId, GameRules rules)
     {
         _statsRepository = statsRepository;
         _profileId = profileId;
+        _rules = rules;
 
         _subscriptions.Add(eventBus.Subscribe<BetPlaced>(OnBetPlaced));
         _subscriptions.Add(eventBus.Subscribe<CardDealt>(OnCardDealt));
@@ -211,9 +213,9 @@ internal sealed class StatsRecorder : IDisposable
             return;
 
         var ruleFingerprint = new RuleFingerprint(
-            FormatBlackjackPayout(GameConfig.BlackjackPayout),
-            GameConfig.DealerHitsSoft17,
-            GameConfig.NumberOfDecks,
+            FormatBlackjackPayout(_rules.BlackjackPayout),
+            _rules.DealerHitsSoft17,
+            _rules.NumberOfDecks,
             ResolveSurrenderRule());
 
         var round = new RoundRecord(
@@ -295,11 +297,11 @@ internal sealed class StatsRecorder : IDisposable
         return hasAce && hard + GameConfig.AceExtraValue <= GameConfig.BustNumber;
     }
 
-    private static string ResolveSurrenderRule()
+    private string ResolveSurrenderRule()
     {
-        if (GameConfig.AllowEarlySurrender)
+        if (_rules.AllowEarlySurrender)
             return "early";
-        if (GameConfig.AllowLateSurrender)
+        if (_rules.AllowLateSurrender)
             return "late";
         return "none";
     }

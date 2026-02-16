@@ -24,6 +24,9 @@ public class BlackjackGame : Microsoft.Xna.Framework.Game
     public ISettingsRepository SettingsRepository => _settingsRepository;
     public Texture2D PixelTexture => _pixelTexture;
     public int ActiveProfileId { get; private set; }
+    public GameRules CurrentRules { get; private set; } = GameRules.Standard;
+
+    public void UpdateRules(GameRules rules) => CurrentRules = rules;
 
     public BlackjackGame()
     {
@@ -58,7 +61,9 @@ public class BlackjackGame : Microsoft.Xna.Framework.Game
 
         var persistedSettings = _settingsRepository.LoadSettings(ActiveProfileId);
         if (persistedSettings.Count > 0)
-            GameConfig.ApplySettings(persistedSettings);
+        {
+            CurrentRules = GameRules.FromSettings(persistedSettings);
+        }
 
         _pixelTexture = new Texture2D(GraphicsDevice, 1, 1);
         _pixelTexture.SetData(new[] { Color.White });

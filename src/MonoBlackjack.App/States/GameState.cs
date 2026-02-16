@@ -17,6 +17,7 @@ internal class GameState : State
     private const float CardAspectRatio = 100f / 145f;
 
     private readonly Texture2D _pixelTexture;
+    private readonly GameRules _rules;
     private readonly Shoe _shoe;
     private readonly CardRenderer _cardRenderer;
     private readonly Human _player;
@@ -79,18 +80,19 @@ internal class GameState : State
         : base(game, graphicsDevice, content)
     {
         _pixelTexture = game.PixelTexture;
+        _rules = game.CurrentRules;
 
         _cardRenderer = new CardRenderer();
         _cardRenderer.LoadTextures(content);
 
-        _shoe = new Shoe(GameConfig.NumberOfDecks);
-        _player = new Human();
-        _dealer = new Dealer();
+        _shoe = new Shoe(_rules.NumberOfDecks, _rules.PenetrationPercent, _rules.UseCryptographicShuffle);
+        _player = new Human("Player", _rules.StartingBank);
+        _dealer = new Dealer(_rules.DealerHitsSoft17);
 
         _eventBus = new EventBus();
         _tweenManager = new TweenManager();
         _sceneRenderer = new SceneRenderer();
-        _statsRecorder = new StatsRecorder(_eventBus, statsRepository, profileId);
+        _statsRecorder = new StatsRecorder(_eventBus, statsRepository, profileId, _rules);
 
         _cardLayer = new SpriteLayer(10);
         _uiLayer = new SpriteLayer(20);
@@ -180,17 +182,17 @@ internal class GameState : State
 
         CalculatePositions();
 
-        if (GameConfig.BetFlow == BetFlowMode.FreePlay)
+        if (_rules.BetFlow == BetFlowMode.FreePlay)
         {
             _gamePhase = GamePhase.Playing;
-            _round = new GameRound(_shoe, _player, _dealer, _eventBus.Publish);
+            _round = new GameRound(_shoe, _player, _dealer, _rules, _eventBus.Publish);
             _round.PlaceBet(0);
             _round.Deal();
         }
         else
         {
             _gamePhase = GamePhase.Betting;
-            _pendingBet = GameConfig.MinimumBet;
+            _pendingBet = _rules.MinimumBet;
             _round = null!;
         }
     }
@@ -488,25 +490,25 @@ internal class GameState : State
     {
         ClearRoundVisualState();
 
-        if (GameConfig.BetFlow == BetFlowMode.FreePlay)
+        if (_rules.BetFlow == BetFlowMode.FreePlay)
         {
             _gamePhase = GamePhase.Playing;
-            _round = new GameRound(_shoe, _player, _dealer, _eventBus.Publish);
+            _round = new GameRound(_shoe, _player, _dealer, _rules, _eventBus.Publish);
             _round.PlaceBet(0);
             _round.Deal();
         }
         else
         {
             // Check for bankruptcy
-            if (_player.Bank < GameConfig.MinimumBet)
+            if (_player.Bank < _rules.MinimumBet)
             {
                 _gamePhase = GamePhase.Bankrupt;
                 return;
             }
 
             _gamePhase = GamePhase.Betting;
-            _pendingBet = Math.Clamp(_pendingBet, GameConfig.MinimumBet,
-                Math.Min(GameConfig.MaximumBet, _player.Bank));
+            _pendingBet = Math.Clamp(_pendingBet, _rules.MinimumBet,
+                Math.Min(_rules.MaximumBet, _player.Bank));
         }
     }
 
@@ -515,7 +517,7 @@ internal class GameState : State
         ClearRoundVisualState();
         _gamePhase = GamePhase.Playing;
         _lastBet = bet;
-        _round = new GameRound(_shoe, _player, _dealer, _eventBus.Publish);
+        _round = new GameRound(_shoe, _player, _dealer, _rules, _eventBus.Publish);
         _round.PlaceBet(bet);
         _round.Deal();
     }
@@ -676,14 +678,14 @@ internal class GameState : State
     private void OnBetDownClicked(object? sender, EventArgs e)
     {
         if (_gamePhase != GamePhase.Betting) return;
-        _pendingBet = Math.Max(GameConfig.MinimumBet, _pendingBet - GameConfig.MinimumBet);
+        _pendingBet = Math.Max(_rules.MinimumBet, _pendingBet - _rules.MinimumBet);
     }
 
     private void OnBetUpClicked(object? sender, EventArgs e)
     {
         if (_gamePhase != GamePhase.Betting) return;
-        var max = Math.Min(GameConfig.MaximumBet, _player.Bank);
-        _pendingBet = Math.Min(max, _pendingBet + GameConfig.MinimumBet);
+        var max = Math.Min(_rules.MaximumBet, _player.Bank);
+        _pendingBet = Math.Min(max, _pendingBet + _rules.MinimumBet);
     }
 
     private void OnDealClicked(object? sender, EventArgs e)
@@ -696,15 +698,15 @@ internal class GameState : State
     {
         if (_gamePhase != GamePhase.Betting) return;
         if (_lastBet <= 0) return;
-        var bet = Math.Clamp(_lastBet, GameConfig.MinimumBet, Math.Min(GameConfig.MaximumBet, _player.Bank));
+        var bet = Math.Clamp(_lastBet, _rules.MinimumBet, Math.Min(_rules.MaximumBet, _player.Bank));
         DealWithBet(bet);
     }
 
     private void OnResetBankrollClicked(object? sender, EventArgs e)
     {
         if (_gamePhase != GamePhase.Bankrupt) return;
-        _player.Bank = GameConfig.StartingBank;
-        _pendingBet = GameConfig.MinimumBet;
+        _player.Bank = _rules.StartingBank;
+        _pendingBet = _rules.MinimumBet;
         _gamePhase = GamePhase.Betting;
     }
 
@@ -838,7 +840,7 @@ internal class GameState : State
     public override void Draw(GameTime gameTime, SpriteBatch spriteBatch)
     {
         var vp = _graphicsDevice.Viewport;
-        bool isBettingMode = GameConfig.BetFlow == BetFlowMode.Betting;
+        bool isBettingMode = _rules.BetFlow == BetFlowMode.Betting;
 
         if (_gamePhase == GamePhase.Betting)
         {

@@ -3,27 +3,26 @@ using MonoBlackjack.Core;
 
 namespace MonoBlackjack.Core.Tests;
 
-[Collection("GameConfig")]
 public class ShoeTests
 {
     [Fact]
     public void Shoe_SingleDeck_Has52Cards()
     {
-        var shoe = new Shoe(1);
+        var shoe = new Shoe(1, 75, false);
         shoe.Remaining.Should().Be(52);
     }
 
     [Fact]
     public void Shoe_SixDecks_Has312Cards()
     {
-        var shoe = new Shoe(6);
+        var shoe = new Shoe(6, 75, false);
         shoe.Remaining.Should().Be(312);
     }
 
     [Fact]
     public void Shoe_Draw_RemovesCard()
     {
-        var shoe = new Shoe(1);
+        var shoe = new Shoe(1, 75, false);
         var initialCount = shoe.Remaining;
 
         shoe.Draw();
@@ -34,7 +33,7 @@ public class ShoeTests
     [Fact]
     public void Shoe_Draw_ReturnsValidCard()
     {
-        var shoe = new Shoe(1);
+        var shoe = new Shoe(1, 75, false);
         var card = shoe.Draw();
 
         Enum.IsDefined(typeof(Rank), card.Rank).Should().BeTrue();
@@ -44,7 +43,7 @@ public class ShoeTests
     [Fact]
     public void Shoe_DrawAll_ThenDrawOne_Reshuffles()
     {
-        var shoe = new Shoe(1, new Random(42)); // Seeded for determinism
+        var shoe = new Shoe(1, 75, false, new Random(42)); // Seeded for determinism
 
         // Draw all 52 cards
         for (int i = 0; i < 52; i++)
@@ -64,76 +63,52 @@ public class ShoeTests
     [Fact]
     public void Shoe_CutCardReached_AtConfiguredPenetration()
     {
-        var originalPenetration = GameConfig.PenetrationPercent;
-        try
-        {
-            GameConfig.PenetrationPercent = 75;
-            var shoe = new Shoe(1, new Random(42));
+        const int penetration = 75;
+        var shoe = new Shoe(1, penetration, false, new Random(42));
 
-            shoe.CutCardRemainingThreshold.Should().Be(13);
-            shoe.IsCutCardReached.Should().BeFalse();
+        shoe.CutCardRemainingThreshold.Should().Be(13);
+        shoe.IsCutCardReached.Should().BeFalse();
 
-            while (shoe.Remaining > shoe.CutCardRemainingThreshold)
-                shoe.Draw();
+        while (shoe.Remaining > shoe.CutCardRemainingThreshold)
+            shoe.Draw();
 
-            shoe.Remaining.Should().Be(13);
-            shoe.IsCutCardReached.Should().BeTrue();
-        }
-        finally
-        {
-            GameConfig.PenetrationPercent = originalPenetration;
-        }
+        shoe.Remaining.Should().Be(13);
+        shoe.IsCutCardReached.Should().BeTrue();
     }
 
     [Fact]
     public void Shoe_ReshuffleIfCutCardReached_ResetsShoe()
     {
-        var originalPenetration = GameConfig.PenetrationPercent;
-        try
-        {
-            GameConfig.PenetrationPercent = 75;
-            var shoe = new Shoe(1, new Random(42));
+        const int penetration = 75;
+        var shoe = new Shoe(1, penetration, false, new Random(42));
 
-            while (shoe.Remaining > shoe.CutCardRemainingThreshold)
-                shoe.Draw();
+        while (shoe.Remaining > shoe.CutCardRemainingThreshold)
+            shoe.Draw();
 
-            var reshuffled = shoe.ReshuffleIfCutCardReached();
+        var reshuffled = shoe.ReshuffleIfCutCardReached();
 
-            reshuffled.Should().BeTrue();
-            shoe.Remaining.Should().Be(52);
-            shoe.IsCutCardReached.Should().BeFalse();
-        }
-        finally
-        {
-            GameConfig.PenetrationPercent = originalPenetration;
-        }
+        reshuffled.Should().BeTrue();
+        shoe.Remaining.Should().Be(52);
+        shoe.IsCutCardReached.Should().BeFalse();
     }
 
     [Fact]
     public void Shoe_ReshuffleIfCutCardNotReached_DoesNothing()
     {
-        var originalPenetration = GameConfig.PenetrationPercent;
-        try
-        {
-            GameConfig.PenetrationPercent = 75;
-            var shoe = new Shoe(1, new Random(42));
-            var remainingBefore = shoe.Remaining;
+        const int penetration = 75;
+        var shoe = new Shoe(1, penetration, false, new Random(42));
+        var remainingBefore = shoe.Remaining;
 
-            var reshuffled = shoe.ReshuffleIfCutCardReached();
+        var reshuffled = shoe.ReshuffleIfCutCardReached();
 
-            reshuffled.Should().BeFalse();
-            shoe.Remaining.Should().Be(remainingBefore);
-        }
-        finally
-        {
-            GameConfig.PenetrationPercent = originalPenetration;
-        }
+        reshuffled.Should().BeFalse();
+        shoe.Remaining.Should().Be(remainingBefore);
     }
 
     [Fact]
     public void Shoe_Reset_RebuildsAndReshuffles()
     {
-        var shoe = new Shoe(6);
+        var shoe = new Shoe(6, 75, false);
 
         // Draw some cards
         for (int i = 0; i < 50; i++)
@@ -149,8 +124,8 @@ public class ShoeTests
     [Fact]
     public void Shoe_WithSeededRandom_IsDeterministic()
     {
-        var shoe1 = new Shoe(1, new Random(42));
-        var shoe2 = new Shoe(1, new Random(42));
+        var shoe1 = new Shoe(1, 75, false, new Random(42));
+        var shoe2 = new Shoe(1, 75, false, new Random(42));
 
         var cards1 = new List<Card>();
         var cards2 = new List<Card>();
@@ -167,7 +142,7 @@ public class ShoeTests
     [Fact]
     public void Shoe_ContainsCorrectCardDistribution()
     {
-        var shoe = new Shoe(1, new Random(42));
+        var shoe = new Shoe(1, 75, false, new Random(42));
         var cards = new List<Card>();
 
         // Draw all cards

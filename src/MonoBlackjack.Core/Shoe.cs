@@ -10,6 +10,7 @@ namespace MonoBlackjack.Core;
 public class Shoe
 {
     private readonly int _deckCount;
+    private readonly int _penetrationPercent;
     private readonly Random? _rng;
     private readonly bool _useCryptoShuffle;
     private List<Card> _cards;
@@ -17,13 +18,14 @@ public class Shoe
     public int Remaining => _cards.Count;
     public int DeckCount => _deckCount;
     public int TotalCards => _deckCount * 52;
-    public int CutCardRemainingThreshold => ComputeCutCardRemainingThreshold(TotalCards, GameConfig.PenetrationPercent);
+    public int CutCardRemainingThreshold => ComputeCutCardRemainingThreshold(TotalCards, _penetrationPercent);
     public bool IsCutCardReached => Remaining <= CutCardRemainingThreshold;
 
-    public Shoe(int deckCount, Random? rng = null)
+    public Shoe(int deckCount, int penetrationPercent, bool useCryptographicShuffle, Random? rng = null)
     {
         _deckCount = deckCount;
-        _useCryptoShuffle = GameConfig.UseCryptographicShuffle;
+        _penetrationPercent = penetrationPercent;
+        _useCryptoShuffle = useCryptographicShuffle;
 
         // Only use provided RNG if crypto shuffle is disabled
         _rng = _useCryptoShuffle ? null : (rng ?? Random.Shared);

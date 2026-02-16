@@ -8,8 +8,15 @@ namespace MonoBlackjack.Core.Players;
 /// </summary>
 public class Dealer
 {
+    private readonly bool _hitsSoft17;
+
     public string Name => "Dealer";
     public Hand Hand { get; private set; } = new();
+
+    public Dealer(bool hitsSoft17)
+    {
+        _hitsSoft17 = hitsSoft17;
+    }
 
     public void DealInitialHand(Shoe shoe)
     {
@@ -45,8 +52,8 @@ public class Dealer
         // Dealer keeps hitting until:
         // - Hard 17 or more
         // - Soft 18 or more
-        // - Soft 17 if DealerHitsSoft17 is false (stand on soft 17)
-        while (Hand.Value < 17 || (GameConfig.DealerHitsSoft17 && Hand.IsSoft && Hand.Value == 17))
+        // - Soft 17 if _hitsSoft17 is false (stand on soft 17)
+        while (Hand.Value < 17 || (_hitsSoft17 && Hand.IsSoft && Hand.Value == 17))
         {
             var card = shoe.Draw();
             Hand.AddCard(card);

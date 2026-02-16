@@ -23,6 +23,7 @@ public class GameRound
     private readonly Shoe _shoe;
     private readonly Human _player;
     private readonly Dealer _dealer;
+    private readonly GameRules _rules;
     private readonly Action<GameEvent> _publish;
     private readonly Dictionary<int, decimal> _bets = new();
     private decimal _insuranceBet;
@@ -51,11 +52,12 @@ public class GameRound
 
     private decimal AvailableFunds => _player.Bank - TotalCommitted;
 
-    public GameRound(Shoe shoe, Human player, Dealer dealer, Action<GameEvent> publish)
+    public GameRound(Shoe shoe, Human player, Dealer dealer, GameRules rules, Action<GameEvent> publish)
     {
         _shoe = shoe;
         _player = player;
         _dealer = dealer;
+        _rules = rules;
         _publish = publish;
     }
 
@@ -73,10 +75,10 @@ public class GameRound
             return;
         }
 
-        if (_player.Bank < GameConfig.MinimumBet)
+        if (_player.Bank < _rules.MinimumBet)
             throw new InvalidOperationException("Insufficient bankroll to place minimum bet.");
 
-        var bet = Math.Clamp(amount, GameConfig.MinimumBet, Math.Min(GameConfig.MaximumBet, _player.Bank));
+        var bet = Math.Clamp(amount, _rules.MinimumBet, Math.Min(_rules.MaximumBet, _player.Bank));
         _bets[0] = bet;
         _publish(new BetPlaced(_player.Name, bet));
         Phase = RoundPhase.Dealing;
@@ -194,7 +196,7 @@ public class GameRound
             // Resolve insurance side bet
             if (_insuranceBet > 0)
             {
-                var insurancePayout = _insuranceBet * GameConfig.InsurancePayout;
+                var insurancePayout = _insuranceBet * GameConfig.InsurancePayout; // Insurance is always 2:1 (const)
                 _player.Bank += insurancePayout;
                 _publish(new InsuranceResult(_player.Name, true, insurancePayout));
             }
@@ -397,11 +399,11 @@ public class GameRound
         if (hand.Cards[0].Rank != hand.Cards[1].Rank)
             return false;
 
-        if (_splitCount >= GameConfig.MaxSplits)
+        if (_splitCount >= _rules.MaxSplits)
             return false;
 
         // If aces and already split once, check ResplitAces
-        if (hand.Cards[0].Rank == Rank.Ace && _splitCount > 0 && !GameConfig.ResplitAces)
+        if (hand.Cards[0].Rank == Rank.Ace && _splitCount > 0 && !_rules.ResplitAces)
             return false;
 
         // Player must have enough available funds for additional bet
@@ -420,7 +422,7 @@ public class GameRound
         if (hand.Cards.Count != 2)
             return false;
 
-        bool allowedByRestriction = GameConfig.DoubleDownRestriction switch
+        bool allowedByRestriction = _rules.DoubleDownRestriction switch
         {
             DoubleDownRestriction.AnyTwoCards => true,
             DoubleDownRestriction.NineToEleven => hand.Value is >= 9 and <= 11,
@@ -431,11 +433,11 @@ public class GameRound
         if (!allowedByRestriction)
             return false;
 
-        if (_bets[_currentHandIndex] * 2 > GameConfig.MaximumBet)
+        if (_bets[_currentHandIndex] * 2 > _rules.MaximumBet)
             return false;
 
         // Block on split hands if DoubleAfterSplit is disabled
-        if (_splitCount > 0 && !GameConfig.DoubleAfterSplit)
+        if (_splitCount > 0 && !_rules.DoubleAfterSplit)
             return false;
 
         return AvailableFunds >= _bets[_currentHandIndex];
@@ -464,7 +466,7 @@ public class GameRound
         if (CurrentHand.Cards.Count != 2)
             return false;
 
-        return GameConfig.AllowLateSurrender || GameConfig.AllowEarlySurrender;
+        return _rules.AllowLateSurrender || _rules.AllowEarlySurrender;
     }
 
     private void AdvanceToNextHand()
@@ -542,7 +544,7 @@ public class GameRound
             if (isNaturalBlackjack && !_dealer.Hand.IsBlackjack)
             {
                 outcome = HandOutcome.Blackjack;
-                payout = bet * GameConfig.BlackjackPayout;
+                payout = bet * _rules.BlackjackPayout;
             }
             else if (_dealer.Hand.IsBlackjack && !isNaturalBlackjack)
             {

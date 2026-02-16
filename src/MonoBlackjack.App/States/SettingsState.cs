@@ -35,7 +35,10 @@ internal sealed class SettingsState : State
 
         var persisted = _settingsRepository.LoadSettings(_profileId);
         if (persisted.Count > 0)
-            GameConfig.ApplySettings(persisted);
+        {
+            var rules = GameRules.FromSettings(persisted);
+            _game.UpdateRules(rules);
+        }
 
         // Create action buttons once
         _saveButton = new Button(_buttonTexture, _font) { Text = "Save", PenColor = Color.Black };
@@ -142,7 +145,7 @@ internal sealed class SettingsState : State
     private void InitializeRows()
     {
         _rows.Clear();
-        var current = GameConfig.ToSettingsDictionary();
+        var current = _game.CurrentRules.ToSettingsDictionary();
 
         AddRow(
             GameConfig.SettingDealerHitsSoft17,
@@ -320,7 +323,8 @@ internal sealed class SettingsState : State
         foreach (var row in _rows)
             settings[row.Key] = row.SelectedValue;
 
-        GameConfig.ApplySettings(settings);
+        var newRules = GameRules.FromSettings(settings);
+        _game.UpdateRules(newRules);
         _settingsRepository.SaveSettings(_profileId, settings);
 
         _statusMessage = "Settings saved";
