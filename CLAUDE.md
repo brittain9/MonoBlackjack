@@ -31,10 +31,16 @@ dotnet run --project src/MonoBlackjack.App
 ## Key Conventions
 
 - **Domain purity:** Core project has zero external dependencies
-- **Testability:** All game logic unit tested, use `[Collection("GameConfig")]` to serialize tests touching static config
+- **Testability:** All game logic unit tested, rules flow via immutable `GameRules` instances
 - **Events:** All state changes emit domain events (see RoundEvents.cs)
 - **Config philosophy:** Configurable = real casino variations. Hardcoded = universal blackjack constants (BustNumber=21, etc.)
 - **Cross-platform:** No OS-specific code, Liberation Sans font
+
+## Coordinate System Standard
+- ALL UI/game render elements use CENTER-ANCHOR positioning
+- `Position` is always the element center point
+- `DestRect` converts center to top-left: `(Position.X - Size.X/2, Position.Y - Size.Y/2)`
+- Direct `SpriteBatch.Draw`/`DrawString` calls should explicitly convert center coordinates to top-left (or use centered origins)
 
 ## Database
 - **Location:** `~/.local/share/MonoBlackjack/monoblackjack.db`
@@ -46,4 +52,4 @@ dotnet run --project src/MonoBlackjack.App
 - `GameRound.cs` (572 lines) — Round orchestration, all game actions (Hit/Stand/Split/Double/Surrender)
 - `GameState.cs` (975 lines) — Main gameplay UI, card rendering, button layout
 - `StatsState.cs` — Dashboard with Overview/Analysis tabs
-- `GameConfig.cs` — Mutable static config (⚠️ anti-pattern, on refactor list)
+- `GameConfig.cs` — Constants + setting keys (no mutable gameplay state)

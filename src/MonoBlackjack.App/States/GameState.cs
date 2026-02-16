@@ -15,6 +15,13 @@ namespace MonoBlackjack;
 internal class GameState : State
 {
     private const float CardAspectRatio = 100f / 145f;
+    private const float DealerCardsYRatio = 0.18f;
+    private const float PlayerCardsYRatio = 0.52f;
+    private const float SingleHandSpacingRatio = 1.08f;
+    private const float MultiHandCardStepRatio = 0.72f;
+    private const float MultiHandGapRatio = 0.9f;
+    private const float MinMultiHandGapViewportRatio = 0.04f;
+    private const float ActionButtonPaddingRatio = 0.012f;
 
     private readonly Texture2D _pixelTexture;
     private readonly GameRules _rules;
@@ -70,6 +77,9 @@ internal class GameState : State
     // Deck position (off-screen left) where cards animate from
     private Vector2 _deckPosition;
     private Vector2 _cardSize;
+    private Vector2 _actionButtonSize;
+    private float _actionButtonY;
+    private float _actionButtonPadding;
 
     public GameState(
         BlackjackGame game,
@@ -207,82 +217,135 @@ internal class GameState : State
         _deckPosition = new Vector2(-_cardSize.X, vp.Height / 2f);
 
         var centerX = vp.Width / 2f;
-        var buttonY = GetPlayerCardsY() + _cardSize.Y + vp.Height / 18f;
 
-        // Calculate button size to fit 5 action buttons in a single row
+        // Size buttons so 5 actions can fit, then reflow visible actions each frame.
         const int maxActionButtons = 5; // Hit, Stand, Split, Double, Surrender
-        const float buttonPadding = 12f; // Minimum gap between buttons
-        var availableWidth = vp.Width * 0.95f; // Use 95% of viewport width
-        var maxButtonWidth = (availableWidth - (buttonPadding * (maxActionButtons - 1))) / maxActionButtons;
-        var buttonWidth = Math.Min(_cardSize.X * 1.2f, maxButtonWidth);
-        var buttonHeight = _cardSize.Y * 0.35f;
-        var buttonSize = new Vector2(buttonWidth, buttonHeight);
+        _actionButtonPadding = Math.Clamp(vp.Width * ActionButtonPaddingRatio, 10f, 20f);
+        var availableWidth = vp.Width * 0.92f;
+        var maxButtonWidth = (availableWidth - (_actionButtonPadding * (maxActionButtons - 1))) / maxActionButtons;
+        var buttonWidth = Math.Clamp(Math.Min(_cardSize.X * 1.2f, maxButtonWidth), 90f, 220f);
+        var buttonHeight = Math.Clamp(_cardSize.Y * 0.35f, 34f, 74f);
+        _actionButtonSize = new Vector2(buttonWidth, buttonHeight);
 
-        // Set all button sizes
-        _hitButton.Size = buttonSize;
-        _standButton.Size = buttonSize;
-        _splitButton.Size = buttonSize;
-        _doubleButton.Size = buttonSize;
-        _surrenderButton.Size = buttonSize;
-        _insuranceButton.Size = buttonSize;
-        _declineInsuranceButton.Size = buttonSize;
+        // Keep action buttons below hand-value labels to avoid collisions.
+        const float handValueScale = 0.9f;
+        const float handValueTopPadding = 8f;
+        var handBottom = GetPlayerCardsY() + _cardSize.Y;
+        var handValueHeight = _font.MeasureString("18").Y * handValueScale;
+        var valueBottom = handBottom + handValueTopPadding + handValueHeight;
+        var valueToButtonsGap = Math.Clamp(vp.Height * 0.015f, 6f, 14f);
+        _actionButtonY = valueBottom + valueToButtonsGap + (_actionButtonSize.Y / 2f);
+        _actionButtonY = Math.Min(_actionButtonY, vp.Height - _actionButtonSize.Y * 0.75f);
 
-        // Single row layout for action buttons: Hit | Stand | Split | Double | Surrender
-        var totalRowWidth = (buttonWidth * maxActionButtons) + (buttonPadding * (maxActionButtons - 1));
-        var startX = centerX - (totalRowWidth / 2f) + (buttonWidth / 2f);
+        // Set all button sizes once; row placement happens in LayoutActionButtons.
+        _hitButton.Size = _actionButtonSize;
+        _standButton.Size = _actionButtonSize;
+        _splitButton.Size = _actionButtonSize;
+        _doubleButton.Size = _actionButtonSize;
+        _surrenderButton.Size = _actionButtonSize;
+        _insuranceButton.Size = _actionButtonSize;
+        _declineInsuranceButton.Size = _actionButtonSize;
 
-        _hitButton.Position = new Vector2(startX, buttonY);
-        _standButton.Position = new Vector2(startX + (buttonWidth + buttonPadding), buttonY);
-        _splitButton.Position = new Vector2(startX + (buttonWidth + buttonPadding) * 2, buttonY);
-        _doubleButton.Position = new Vector2(startX + (buttonWidth + buttonPadding) * 3, buttonY);
-        _surrenderButton.Position = new Vector2(startX + (buttonWidth + buttonPadding) * 4, buttonY);
+        LayoutActionButtons();
 
         // Insurance buttons (shown only during insurance offer, centered)
-        var insuranceTotalWidth = (buttonWidth * 2) + buttonPadding;
-        var insuranceStartX = centerX - (insuranceTotalWidth / 2f) + (buttonWidth / 2f);
-        _insuranceButton.Position = new Vector2(insuranceStartX, buttonY);
-        _declineInsuranceButton.Position = new Vector2(insuranceStartX + buttonWidth + buttonPadding, buttonY);
+        var insuranceTotalWidth = (_actionButtonSize.X * 2) + _actionButtonPadding;
+        var insuranceStartX = centerX - (insuranceTotalWidth / 2f) + (_actionButtonSize.X / 2f);
+        _insuranceButton.Position = new Vector2(insuranceStartX, _actionButtonY);
+        _declineInsuranceButton.Position = new Vector2(insuranceStartX + _actionButtonSize.X + _actionButtonPadding, _actionButtonY);
 
         // Betting phase layout
-        var arrowSize = new Vector2(buttonSize.Y * 1.2f, buttonSize.Y);
+        var arrowSize = new Vector2(_actionButtonSize.Y * 1.2f, _actionButtonSize.Y);
         var betCenterY = vp.Height * 0.5f;
-        var betArrowSpacing = buttonSize.X * 0.8f;
+        var betArrowSpacing = _actionButtonSize.X * 0.8f;
         _betDownButton.Size = arrowSize;
         _betUpButton.Size = arrowSize;
         _betDownButton.Position = new Vector2(centerX - betArrowSpacing, betCenterY);
         _betUpButton.Position = new Vector2(centerX + betArrowSpacing, betCenterY);
 
-        _dealButton.Size = buttonSize;
-        _dealButton.Position = new Vector2(centerX, betCenterY + buttonSize.Y * 1.5f);
+        _dealButton.Size = _actionButtonSize;
+        _dealButton.Position = new Vector2(centerX, betCenterY + _actionButtonSize.Y * 1.5f);
 
-        _repeatBetButton.Size = buttonSize;
-        _repeatBetButton.Position = new Vector2(centerX, betCenterY + buttonSize.Y * 2.8f);
+        _repeatBetButton.Size = _actionButtonSize;
+        _repeatBetButton.Position = new Vector2(centerX, betCenterY + _actionButtonSize.Y * 2.8f);
 
         // Bankrupt phase layout - two buttons centered
-        _resetBankrollButton.Size = buttonSize;
-        _menuButton.Size = buttonSize;
+        _resetBankrollButton.Size = _actionButtonSize;
+        _menuButton.Size = _actionButtonSize;
         var bankruptY = vp.Height * 0.55f;
-        var bankruptTotalWidth = (buttonWidth * 2) + buttonPadding;
-        var bankruptStartX = centerX - (bankruptTotalWidth / 2f) + (buttonWidth / 2f);
+        var bankruptTotalWidth = (_actionButtonSize.X * 2) + _actionButtonPadding;
+        var bankruptStartX = centerX - (bankruptTotalWidth / 2f) + (_actionButtonSize.X / 2f);
         _resetBankrollButton.Position = new Vector2(bankruptStartX, bankruptY);
-        _menuButton.Position = new Vector2(bankruptStartX + buttonWidth + buttonPadding, bankruptY);
+        _menuButton.Position = new Vector2(bankruptStartX + _actionButtonSize.X + _actionButtonPadding, bankruptY);
+    }
+
+    private void LayoutActionButtons()
+    {
+        IReadOnlyList<Button> rowButtons = _gamePhase == GamePhase.Playing && _round.Phase == RoundPhase.PlayerTurn
+            ? GetVisibleActionButtons()
+            : [_hitButton, _standButton, _splitButton, _doubleButton, _surrenderButton];
+
+        if (rowButtons.Count == 0)
+            return;
+
+        var centerX = _graphicsDevice.Viewport.Width / 2f;
+        var totalWidth = (_actionButtonSize.X * rowButtons.Count) + (_actionButtonPadding * (rowButtons.Count - 1));
+        var startX = centerX - (totalWidth / 2f) + (_actionButtonSize.X / 2f);
+
+        for (int i = 0; i < rowButtons.Count; i++)
+        {
+            var button = rowButtons[i];
+            button.Size = _actionButtonSize;
+            button.Position = new Vector2(startX + i * (_actionButtonSize.X + _actionButtonPadding), _actionButtonY);
+        }
+    }
+
+    private List<Button> GetVisibleActionButtons()
+    {
+        var buttons = new List<Button>(5)
+        {
+            _hitButton,
+            _standButton
+        };
+
+        if (_round.CanSplit())
+            buttons.Add(_splitButton);
+        if (_round.CanDoubleDown())
+            buttons.Add(_doubleButton);
+        if (_round.CanSurrender())
+            buttons.Add(_surrenderButton);
+
+        return buttons;
     }
 
     private float GetDealerCardsY()
     {
         var vp = _graphicsDevice.Viewport;
-        return vp.Height * 0.2f;
+        return vp.Height * DealerCardsYRatio;
     }
 
     private float GetPlayerCardsY()
     {
         var vp = _graphicsDevice.Viewport;
-        return vp.Height * 0.56f;
+        return vp.Height * PlayerCardsYRatio;
     }
 
     private int GetPlayerHandCount()
     {
+        if (_player.Hands.Count > 0)
+            return _player.Hands.Count;
+
         return _playerHandCardCounts.Count;
+    }
+
+    private int GetPlayerCardCount(int handIndex)
+    {
+        int trackedCount = _playerHandCardCounts.GetValueOrDefault(handIndex, 0);
+        int domainCount = handIndex >= 0 && handIndex < _player.Hands.Count
+            ? _player.Hands[handIndex].Cards.Count
+            : 0;
+
+        return Math.Max(1, Math.Max(trackedCount, domainCount));
     }
 
     /// <summary>
@@ -305,37 +368,37 @@ internal class GameState : State
 
         if (totalHands <= 1)
         {
-            int cardCount = _playerHandCardCounts.GetValueOrDefault(0, 2);
+            int cardCount = GetPlayerCardCount(0);
             return ComputeRowCardCenter(vp, cardCount, cardIndexInHand, centerY);
         }
 
         // Multiple hands: spread horizontally
-        var cardOverlap = _cardSize.X * 0.45f;
-        var handGap = _cardSize.X * 1.8f;
+        var cardStep = _cardSize.X * MultiHandCardStepRatio;
+        var handGap = Math.Max(_cardSize.X * MultiHandGapRatio, vp.Width * MinMultiHandGapViewportRatio);
 
         // Calculate total width of all hands
-        float totalWidth = ComputeMultiHandWidth(totalHands, cardOverlap, handGap);
+        float totalWidth = ComputeMultiHandWidth(totalHands, cardStep, handGap);
 
         // Adaptive scaling: if total width exceeds viewport, scale down
         float maxWidth = vp.Width * 0.9f;
         if (totalWidth > maxWidth)
         {
             float scale = maxWidth / totalWidth;
-            cardOverlap *= scale;
-            handGap *= scale;
-            totalWidth = ComputeMultiHandWidth(totalHands, cardOverlap, handGap);
+            cardStep *= scale;
+            handGap = Math.Max(handGap * scale, _cardSize.X * 0.25f);
+            totalWidth = ComputeMultiHandWidth(totalHands, cardStep, handGap);
         }
 
         // Find x offset for this hand's first card center
         float handStartX = vp.Width / 2f - totalWidth / 2f;
         for (int h = 0; h < handIndex; h++)
         {
-            int cc = _playerHandCardCounts.GetValueOrDefault(h, 2);
-            handStartX += _cardSize.X + cardOverlap * (cc - 1) + handGap;
+            int cc = GetPlayerCardCount(h);
+            handStartX += _cardSize.X + cardStep * (cc - 1) + handGap;
         }
 
         // Card center within this hand
-        float cardCenterX = handStartX + halfCard.X + cardOverlap * cardIndexInHand;
+        float cardCenterX = handStartX + halfCard.X + cardStep * cardIndexInHand;
         return new Vector2(cardCenterX, centerY);
     }
 
@@ -346,13 +409,13 @@ internal class GameState : State
     private Vector2 ComputeRowCardCenter(Viewport vp, int cardCount, int cardIndex, float centerY)
     {
         var halfCard = _cardSize / 2f;
-        var spacing = _cardSize.X * 1.15f;
+        var spacing = _cardSize.X * SingleHandSpacingRatio;
 
         // Adaptive: if row overflows viewport, compress spacing
         float rowWidth = _cardSize.X + spacing * (cardCount - 1);
         float maxWidth = vp.Width * 0.9f;
         if (rowWidth > maxWidth && cardCount > 1)
-            spacing = (maxWidth - _cardSize.X) / (cardCount - 1);
+            spacing = Math.Max((maxWidth - _cardSize.X) / (cardCount - 1), _cardSize.X * 0.55f);
 
         float totalRowWidth = _cardSize.X + spacing * (cardCount - 1);
         float startX = vp.Width / 2f - totalRowWidth / 2f;
@@ -360,13 +423,13 @@ internal class GameState : State
         return new Vector2(cardCenterX, centerY);
     }
 
-    private float ComputeMultiHandWidth(int totalHands, float cardOverlap, float handGap)
+    private float ComputeMultiHandWidth(int totalHands, float cardStep, float handGap)
     {
         float totalWidth = 0;
         for (int h = 0; h < totalHands; h++)
         {
-            int cc = _playerHandCardCounts.GetValueOrDefault(h, 2);
-            totalWidth += _cardSize.X + cardOverlap * (cc - 1);
+            int cc = GetPlayerCardCount(h);
+            totalWidth += _cardSize.X + cardStep * (cc - 1);
         }
         totalWidth += handGap * (totalHands - 1);
         return totalWidth;
@@ -410,6 +473,10 @@ internal class GameState : State
         _tweenManager.Add(TweenBuilder.MoveTo(sprite, target, duration, delay, Easing.EaseOutQuad));
         _tweenManager.Add(TweenBuilder.FadeTo(sprite, 1f, duration * 0.5f, delay, Easing.Linear));
 
+        // Adding a card changes centered row layout; reflow existing cards now
+        // (without waiting for resize) to avoid temporary overlap artifacts.
+        RepositionRecipientCards(recipient, duration: 0.25f, delay: delay, excludeSprite: sprite);
+
         _cardLayer.Add(sprite);
         _dealCardIndex++;
     }
@@ -449,7 +516,7 @@ internal class GameState : State
 
         // Multiple hands: position above each hand's column
         // Card positions are now center-anchored, so average of first+last = hand center
-        int cardCount = _playerHandCardCounts.GetValueOrDefault(handIndex, 2);
+        int cardCount = GetPlayerCardCount(handIndex);
         var firstCardCenter = GetCardTargetPosition(_player.Name, handIndex, 0);
         var lastCardCenter = GetCardTargetPosition(_player.Name, handIndex, cardCount - 1);
         float centerX = (firstCardCenter.X + lastCardCenter.X) / 2f;
@@ -458,16 +525,23 @@ internal class GameState : State
         return new Vector2(centerX, labelY);
     }
 
-    private void RepositionPlayerCards()
+    private void RepositionRecipientCards(string recipient, float duration, float delay, CardSprite? excludeSprite = null)
     {
         foreach (var tracked in _trackedCards)
         {
-            if (tracked.Recipient != _player.Name)
+            if (tracked.Recipient != recipient)
+                continue;
+            if (excludeSprite != null && ReferenceEquals(tracked.Sprite, excludeSprite))
                 continue;
 
-            var target = GetCardTargetPosition(_player.Name, tracked.HandIndex, tracked.CardIndexInHand);
-            _tweenManager.Add(TweenBuilder.MoveTo(tracked.Sprite, target, 0.3f, 0f, Easing.EaseOutQuad));
+            var target = GetCardTargetPosition(tracked.Recipient, tracked.HandIndex, tracked.CardIndexInHand);
+            _tweenManager.Add(TweenBuilder.MoveTo(tracked.Sprite, target, duration, delay, Easing.EaseOutQuad));
         }
+    }
+
+    private void RepositionPlayerCards()
+    {
+        RepositionRecipientCards(_player.Name, duration: 0.3f, delay: 0f);
     }
 
     private void ClearRoundVisualState()
@@ -809,14 +883,9 @@ internal class GameState : State
 
         if (IsPlayerInteractionEnabled())
         {
-            _hitButton.Update(gameTime);
-            _standButton.Update(gameTime);
-            if (_round.CanSplit())
-                _splitButton.Update(gameTime);
-            if (_round.CanDoubleDown())
-                _doubleButton.Update(gameTime);
-            if (_round.CanSurrender())
-                _surrenderButton.Update(gameTime);
+            LayoutActionButtons();
+            foreach (var button in GetVisibleActionButtons())
+                button.Update(gameTime);
         }
         else if (IsInsuranceInteractionEnabled())
         {
@@ -889,17 +958,12 @@ internal class GameState : State
 
         if (IsPlayerInteractionEnabled())
         {
+            LayoutActionButtons();
             spriteBatch.Begin();
             if (isBettingMode) DrawHud(spriteBatch, vp);
             DrawHandValues(spriteBatch);
-            _hitButton.Draw(gameTime, spriteBatch);
-            _standButton.Draw(gameTime, spriteBatch);
-            if (_round.CanSplit())
-                _splitButton.Draw(gameTime, spriteBatch);
-            if (_round.CanDoubleDown())
-                _doubleButton.Draw(gameTime, spriteBatch);
-            if (_round.CanSurrender())
-                _surrenderButton.Draw(gameTime, spriteBatch);
+            foreach (var button in GetVisibleActionButtons())
+                button.Draw(gameTime, spriteBatch);
 
             // Draw active hand indicator when multiple hands
             if (GetPlayerHandCount() > 1)
@@ -989,7 +1053,7 @@ internal class GameState : State
             var textSize = _font.MeasureString(valueText) * scale;
 
             // Position below the hand
-            int cardCount = _playerHandCardCounts.GetValueOrDefault(h, 2);
+            int cardCount = GetPlayerCardCount(h);
             Vector2 firstCardPos = GetCardTargetPosition(_player.Name, h, 0);
             Vector2 lastCardPos = GetCardTargetPosition(_player.Name, h, cardCount - 1);
             float handCenterX = (firstCardPos.X + lastCardPos.X) / 2f;
@@ -1004,7 +1068,7 @@ internal class GameState : State
 
     private void DrawActiveHandIndicator(SpriteBatch spriteBatch)
     {
-        int cardCount = _playerHandCardCounts.GetValueOrDefault(_activePlayerHandIndex, 2);
+        int cardCount = GetPlayerCardCount(_activePlayerHandIndex);
 
         var firstCardCenter = GetCardTargetPosition(_player.Name, _activePlayerHandIndex, 0);
         var lastCardCenter = GetCardTargetPosition(_player.Name, _activePlayerHandIndex, cardCount - 1);

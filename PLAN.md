@@ -21,43 +21,9 @@ MonoBlackjack is a casino-grade blackjack simulator with strong domain modeling 
 **Estimated Effort:** 5-7 hours
 **Dependencies:** None - these are foundational
 
-### 1.1 Refactor GameConfig → Immutable GameRules Record
-**Problem:** Mutable static `GameConfig` causes thread-safety issues, test pollution, and hidden dependencies across 15 files.
+### 1.1 Refactor GameConfig → Immutable GameRules Record (COMPLETE)
 
-**Files Affected:**
-- Core: `GameConfig.cs`, `GameRound.cs`, `Hand.cs`, `Shoe.cs`, `Dealer.cs`, `Human.cs`
-- App: `GameState.cs`, `SettingsState.cs`, `StatsRecorder.cs`, `BlackjackGame.cs`
-- Tests: `GameRoundTests.cs`, `ShoeTests.cs`, `DealerTests.cs`, `GameConfigTests.cs`
-
-**Approach:**
-1. Create new `GameRules.cs` immutable record with all configuration properties
-2. Add factory method `GameRules.Standard` with defaults (6 decks, 3:2 payout, etc.)
-3. Add validation in record constructor (e.g., `NumberOfDecks >= 1`)
-4. Update Core classes to accept `GameRules` via constructor injection:
-   - `GameRound(Shoe shoe, Human player, Dealer dealer, GameRules rules, Action<GameEvent> publish)`
-   - `Shoe(int deckCount, double penetration, bool useCrypto)`
-   - `Hand.Evaluate(List<Card> cards, int bustNumber, int aceExtraValue)` - pass constants instead of static access
-5. Update App layer to create `GameRules` instance from settings and pass through dependency chain
-6. Keep `GameConfig` as adapter temporarily (reads from `GameRules`) to avoid breaking changes
-7. Remove test workarounds: delete `[Collection("GameConfig")]` attributes and try/finally blocks
-8. Final step: Delete `GameConfig` class entirely
-
-**Benefits:**
-- Thread-safe (enables future multiplayer/async features)
-- Testable without serialization workarounds
-- Explicit dependencies (no hidden static coupling)
-- Immutable (prevents mid-game rule changes)
-
-**Verification:**
-```bash
-dotnet test MonoBlackjack.slnx  # All 94 tests pass
-dotnet build MonoBlackjack.slnx  # Clean build
-dotnet run --project src/MonoBlackjack.App  # Game functions normally
-```
-
----
-
-### 1.2 Standardize Coordinate System to Center-Anchor
+### 1.2 Standardize Coordinate System to Center-Anchor (COMPLETE)
 **Problem:** `CardRenderer.DrawCard` uses top-left origin while `Sprite`/`Button`/`CardSprite` use center-anchor, causing confusion and potential layout bugs.
 
 **Files Affected:**

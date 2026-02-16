@@ -5,6 +5,10 @@ using Microsoft.Xna.Framework.Input;
 
 namespace MonoBlackjack
 {
+    /// <summary>
+    /// UI button using the global center-anchor coordinate standard.
+    /// Position is the center point; DestRect performs center-to-top-left conversion for drawing.
+    /// </summary>
     public class Button : MonoBlackjack.Component
     {
         private MouseState _currentMouse;
@@ -16,12 +20,16 @@ namespace MonoBlackjack
         public event EventHandler? Click;
         public bool Clicked { get; private set; }
         public Color PenColor { get;set; }
+        /// <summary>
+        /// Center-anchor screen position.
+        /// </summary>
         public Vector2 Position { get; set; }
         public Vector2 Size { get; set; }
         public Rectangle DestRect
         {
             get
             {
+                // SpriteBatch destination rectangles are top-left anchored.
                 return new Rectangle(
                     (int)(Position.X - Size.X / 2f),
                     (int)(Position.Y - Size.Y / 2f),

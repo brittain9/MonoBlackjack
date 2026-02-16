@@ -6,10 +6,14 @@ namespace MonoBlackjack.Rendering;
 /// <summary>
 /// Base drawable element with position, scale, rotation, and opacity.
 /// Sprites live in layers and are sorted by ZOrder for draw ordering.
+/// Coordinate system standard: Position is always the CENTER point.
 /// </summary>
 public class Sprite
 {
     public Texture2D? Texture { get; set; }
+    /// <summary>
+    /// Center-anchor screen position.
+    /// </summary>
     public Vector2 Position { get; set; }
     public Vector2 Size { get; set; }
     public float Scale { get; set; } = 1f;
@@ -21,7 +25,7 @@ public class Sprite
     public float Depth { get; set; }
 
     /// <summary>
-    /// Destination rectangle centered on Position.
+    /// Converts center-anchor Position into SpriteBatch's top-left destination rectangle.
     /// </summary>
     public Rectangle DestRect
     {
