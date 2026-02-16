@@ -80,6 +80,7 @@ public sealed class DatabaseManager
                 PlayedUtc         TEXT NOT NULL,
                 BetAmount         REAL NOT NULL,
                 NetPayout         REAL NOT NULL,
+                DealerBusted      INTEGER NOT NULL DEFAULT 0,
                 BlackjackPayout   TEXT NOT NULL,
                 DealerHitsS17     INTEGER NOT NULL,
                 DeckCount         INTEGER NOT NULL,
@@ -120,10 +121,30 @@ public sealed class DatabaseManager
             CREATE INDEX IF NOT EXISTS IX_Round_SessionId ON Round(SessionId);
             CREATE INDEX IF NOT EXISTS IX_Session_ProfileId ON Session(ProfileId);
             CREATE INDEX IF NOT EXISTS IX_ProfileSetting_ProfileId ON ProfileSetting(ProfileId);
+            CREATE INDEX IF NOT EXISTS IX_HandResult_RoundId ON HandResult(RoundId);
+            CREATE INDEX IF NOT EXISTS IX_CardSeen_RoundId ON CardSeen(RoundId);
+            CREATE INDEX IF NOT EXISTS IX_Decision_RoundId ON Decision(RoundId);
             CREATE INDEX IF NOT EXISTS IX_Decision_Action ON Decision(Action);
             CREATE INDEX IF NOT EXISTS IX_Decision_PlayerValue ON Decision(PlayerValue);
             CREATE INDEX IF NOT EXISTS IX_Decision_DealerUpcard ON Decision(DealerUpcard);
             """;
         command.ExecuteNonQuery();
+
+        RunMigrations(connection);
+    }
+
+    private static void RunMigrations(SqliteConnection connection)
+    {
+        // Migration: add DealerBusted column to Round table (for pre-existing databases)
+        try
+        {
+            using var cmd = connection.CreateCommand();
+            cmd.CommandText = "ALTER TABLE Round ADD COLUMN DealerBusted INTEGER NOT NULL DEFAULT 0;";
+            cmd.ExecuteNonQuery();
+        }
+        catch (SqliteException)
+        {
+            // Column already exists — ignore
+        }
     }
 }

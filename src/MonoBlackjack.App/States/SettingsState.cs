@@ -13,9 +13,9 @@ internal sealed class SettingsState : State
     private readonly Texture2D _buttonTexture;
     private readonly SpriteFont _font;
     private readonly List<SettingRow> _rows = [];
-    private readonly List<Button> _buttons = [];
-    private Button _saveButton = null!;
-    private Button _backButton = null!;
+    private readonly List<Button> _allButtons = [];
+    private readonly Button _saveButton;
+    private readonly Button _backButton;
     private string _statusMessage = string.Empty;
     private float _statusSeconds;
 
@@ -37,8 +37,26 @@ internal sealed class SettingsState : State
         if (persisted.Count > 0)
             GameConfig.ApplySettings(persisted);
 
+        // Create action buttons once
+        _saveButton = new Button(_buttonTexture, _font) { Text = "Save", PenColor = Color.Black };
+        _saveButton.Click += OnSaveClicked;
+
+        _backButton = new Button(_buttonTexture, _font) { Text = "Back", PenColor = Color.Black };
+        _backButton.Click += OnBackClicked;
+
+        // Create row data and their nav buttons (once)
         InitializeRows();
-        BuildLayout();
+
+        // Populate _allButtons from rows + action buttons
+        foreach (var row in _rows)
+        {
+            _allButtons.Add(row.PreviousButton);
+            _allButtons.Add(row.NextButton);
+        }
+        _allButtons.Add(_saveButton);
+        _allButtons.Add(_backButton);
+
+        UpdateLayout();
     }
 
     public override void Draw(GameTime gameTime, SpriteBatch spriteBatch)
@@ -53,7 +71,7 @@ internal sealed class SettingsState : State
             spriteBatch.DrawString(_font, row.SelectedLabel, row.ValuePosition, Color.Gold, 0f, Vector2.Zero, 0.85f, SpriteEffects.None, 0f);
         }
 
-        foreach (var button in _buttons)
+        foreach (var button in _allButtons)
             button.Draw(gameTime, spriteBatch);
 
         if (!string.IsNullOrEmpty(_statusMessage))
@@ -69,7 +87,7 @@ internal sealed class SettingsState : State
 
     public override void Update(GameTime gameTime)
     {
-        foreach (var button in _buttons)
+        foreach (var button in _allButtons)
             button.Update(gameTime);
 
         if (_statusSeconds > 0f)
@@ -84,7 +102,7 @@ internal sealed class SettingsState : State
 
     public override void HandleResize(Rectangle vp)
     {
-        BuildLayout();
+        UpdateLayout();
     }
 
     private void DrawTitle(SpriteBatch spriteBatch)
@@ -186,6 +204,11 @@ internal sealed class SettingsState : State
             ],
             current);
         AddRow(
+            GameConfig.SettingBetFlow,
+            "Bet Mode",
+            [new SettingChoice("Betting", "Betting"), new SettingChoice("Free Play", "FreePlay")],
+            current);
+        AddRow(
             GameConfig.SettingPenetrationPercent,
             "Shoe Penetration",
             [
@@ -219,13 +242,22 @@ internal sealed class SettingsState : State
             }
         }
 
-        _rows.Add(new SettingRow(key, label, choices.ToList(), selectedIndex));
+        var row = new SettingRow(key, label, choices.ToList(), selectedIndex);
+
+        // Create nav buttons once per row (handlers bound here, never re-created)
+        row.PreviousButton = new Button(_buttonTexture, _font) { Text = "<", PenColor = Color.Black };
+        row.NextButton = new Button(_buttonTexture, _font) { Text = ">", PenColor = Color.Black };
+        row.PreviousButton.Click += (_, _) => ShiftRow(row, -1);
+        row.NextButton.Click += (_, _) => ShiftRow(row, 1);
+
+        _rows.Add(row);
     }
 
-    private void BuildLayout()
+    /// <summary>
+    /// Recomputes positions and sizes for all buttons. Does NOT create new buttons.
+    /// </summary>
+    private void UpdateLayout()
     {
-        _buttons.Clear();
-
         var vp = _graphicsDevice.Viewport;
         float rowTop = vp.Height * 0.17f;
         float rowSpacing = Math.Clamp(vp.Height * 0.06f, 38f, 56f);
@@ -239,39 +271,19 @@ internal sealed class SettingsState : State
             Math.Clamp(vp.Width * 0.055f, 58f, 90f),
             Math.Clamp(vp.Height * 0.048f, 30f, 44f));
 
-        foreach (var row in _rows)
+        for (int i = 0; i < _rows.Count; i++)
         {
-            int rowIndex = _rows.IndexOf(row);
-            float y = rowTop + rowSpacing * rowIndex;
+            var row = _rows[i];
+            float y = rowTop + rowSpacing * i;
 
             row.LabelPosition = new Vector2(labelX, y);
             row.ValuePosition = new Vector2(valueX, y);
 
-            var previous = new Button(_buttonTexture, _font)
-            {
-                Text = "<",
-                PenColor = Color.Black,
-                Size = navButtonSize,
-                Position = new Vector2(prevX, y + navButtonSize.Y * 0.25f)
-            };
+            row.PreviousButton.Size = navButtonSize;
+            row.PreviousButton.Position = new Vector2(prevX, y + navButtonSize.Y * 0.25f);
 
-            var next = new Button(_buttonTexture, _font)
-            {
-                Text = ">",
-                PenColor = Color.Black,
-                Size = navButtonSize,
-                Position = new Vector2(nextX, y + navButtonSize.Y * 0.25f)
-            };
-
-            var capturedRow = row;
-            previous.Click += (_, _) => ShiftRow(capturedRow, -1);
-            next.Click += (_, _) => ShiftRow(capturedRow, 1);
-
-            row.PreviousButton = previous;
-            row.NextButton = next;
-
-            _buttons.Add(previous);
-            _buttons.Add(next);
+            row.NextButton.Size = navButtonSize;
+            row.NextButton.Position = new Vector2(nextX, y + navButtonSize.Y * 0.25f);
         }
 
         var actionButtonSize = new Vector2(
@@ -282,26 +294,11 @@ internal sealed class SettingsState : State
         float centerX = vp.Width / 2f;
         float offset = actionButtonSize.X * 0.62f;
 
-        _saveButton = new Button(_buttonTexture, _font)
-        {
-            Text = "Save",
-            PenColor = Color.Black,
-            Size = actionButtonSize,
-            Position = new Vector2(centerX - offset, actionY)
-        };
-        _saveButton.Click += OnSaveClicked;
+        _saveButton.Size = actionButtonSize;
+        _saveButton.Position = new Vector2(centerX - offset, actionY);
 
-        _backButton = new Button(_buttonTexture, _font)
-        {
-            Text = "Back",
-            PenColor = Color.Black,
-            Size = actionButtonSize,
-            Position = new Vector2(centerX + offset, actionY)
-        };
-        _backButton.Click += OnBackClicked;
-
-        _buttons.Add(_saveButton);
-        _buttons.Add(_backButton);
+        _backButton.Size = actionButtonSize;
+        _backButton.Position = new Vector2(centerX + offset, actionY);
     }
 
     private void ShiftRow(SettingRow row, int direction)

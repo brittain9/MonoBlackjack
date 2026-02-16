@@ -3,6 +3,7 @@ using MonoBlackjack.Core;
 
 namespace MonoBlackjack.Core.Tests;
 
+[Collection("GameConfig")]
 public class ShoeTests
 {
     [Fact]

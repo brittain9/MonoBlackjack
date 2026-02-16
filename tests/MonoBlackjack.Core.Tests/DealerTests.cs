@@ -4,6 +4,7 @@ using MonoBlackjack.Core.Players;
 
 namespace MonoBlackjack.Core.Tests;
 
+[Collection("GameConfig")]
 public class DealerTests
 {
     [Fact]

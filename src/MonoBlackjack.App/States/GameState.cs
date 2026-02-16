@@ -16,6 +16,7 @@ internal class GameState : State
 {
     private const float CardAspectRatio = 100f / 145f;
 
+    private readonly Texture2D _pixelTexture;
     private readonly Shoe _shoe;
     private readonly CardRenderer _cardRenderer;
     private readonly Human _player;
@@ -35,7 +36,25 @@ internal class GameState : State
     private readonly Button _surrenderButton;
     private readonly Button _insuranceButton;
     private readonly Button _declineInsuranceButton;
+
+    // Betting phase buttons
+    private readonly Button _betDownButton;
+    private readonly Button _betUpButton;
+    private readonly Button _dealButton;
+    private readonly Button _repeatBetButton;
+
+    // Bankrupt phase buttons
+    private readonly Button _resetBankrollButton;
+    private readonly Button _menuButton;
+    private readonly StatsRecorder _statsRecorder;
+
     private readonly List<TrackedCardSprite> _trackedCards = [];
+    private readonly HashSet<int> _bustedHands = new();
+
+    private enum GamePhase { Betting, Playing, Bankrupt }
+    private GamePhase _gamePhase;
+    private decimal _pendingBet;
+    private decimal _lastBet;
 
     private GameRound _round;
     private int _dealCardIndex;
@@ -58,6 +77,8 @@ internal class GameState : State
         int profileId)
         : base(game, graphicsDevice, content)
     {
+        _pixelTexture = game.PixelTexture;
+
         _cardRenderer = new CardRenderer();
         _cardRenderer.LoadTextures(content);
 
@@ -68,7 +89,7 @@ internal class GameState : State
         _eventBus = new EventBus();
         _tweenManager = new TweenManager();
         _sceneRenderer = new SceneRenderer();
-        _ = new StatsRecorder(_eventBus, statsRepository, profileId);
+        _statsRecorder = new StatsRecorder(_eventBus, statsRepository, profileId);
 
         _cardLayer = new SpriteLayer(10);
         _uiLayer = new SpriteLayer(20);
@@ -114,6 +135,16 @@ internal class GameState : State
             PenColor = Color.Black
         };
 
+        // Betting phase buttons
+        _betDownButton = new Button(buttonTexture, _font) { Text = "<", PenColor = Color.Black };
+        _betUpButton = new Button(buttonTexture, _font) { Text = ">", PenColor = Color.Black };
+        _dealButton = new Button(buttonTexture, _font) { Text = "Deal", PenColor = Color.Black };
+        _repeatBetButton = new Button(buttonTexture, _font) { Text = "Repeat Bet", PenColor = Color.Black };
+
+        // Bankrupt phase buttons
+        _resetBankrollButton = new Button(buttonTexture, _font) { Text = "Reset", PenColor = Color.Black };
+        _menuButton = new Button(buttonTexture, _font) { Text = "Menu", PenColor = Color.Black };
+
         _hitButton.Click += OnHitClicked;
         _standButton.Click += OnStandClicked;
         _splitButton.Click += OnSplitClicked;
@@ -121,6 +152,12 @@ internal class GameState : State
         _surrenderButton.Click += OnSurrenderClicked;
         _insuranceButton.Click += OnInsuranceClicked;
         _declineInsuranceButton.Click += OnDeclineInsuranceClicked;
+        _betDownButton.Click += OnBetDownClicked;
+        _betUpButton.Click += OnBetUpClicked;
+        _dealButton.Click += OnDealClicked;
+        _repeatBetButton.Click += OnRepeatBetClicked;
+        _resetBankrollButton.Click += OnResetBankrollClicked;
+        _menuButton.Click += OnMenuClicked;
 
         _eventBus.Subscribe<CardDealt>(OnCardDealt);
         _eventBus.Subscribe<InitialDealComplete>(OnInitialDealComplete);
@@ -142,9 +179,19 @@ internal class GameState : State
 
         CalculatePositions();
 
-        _round = new GameRound(_shoe, _player, _dealer, _eventBus.Publish);
-        _round.PlaceBet(GameConfig.MinimumBet);
-        _round.Deal();
+        if (GameConfig.BetFlow == BetFlowMode.FreePlay)
+        {
+            _gamePhase = GamePhase.Playing;
+            _round = new GameRound(_shoe, _player, _dealer, _eventBus.Publish);
+            _round.PlaceBet(0);
+            _round.Deal();
+        }
+        else
+        {
+            _gamePhase = GamePhase.Betting;
+            _pendingBet = GameConfig.MinimumBet;
+            _round = null!;
+        }
     }
 
     private void CalculatePositions()
@@ -154,9 +201,10 @@ internal class GameState : State
         var cardWidth = cardHeight * CardAspectRatio;
         _cardSize = new Vector2(cardWidth, cardHeight);
 
-        _deckPosition = new Vector2(-_cardSize.X - 20, vp.Height / 2f);
+        _deckPosition = new Vector2(-_cardSize.X, vp.Height / 2f);
 
-        var buttonSize = new Vector2(_cardSize.X * 1.35f, _cardSize.Y * 0.35f);
+        var maxButtonWidth = (vp.Width * 0.9f) / 3.3f;
+        var buttonSize = new Vector2(Math.Min(_cardSize.X * 1.35f, maxButtonWidth), _cardSize.Y * 0.35f);
         var centerX = vp.Width / 2f;
         var gap = buttonSize.X * 0.58f;
         var buttonY = GetPlayerCardsY() + _cardSize.Y + vp.Height / 18f + buttonSize.Y / 2f;
@@ -178,6 +226,28 @@ internal class GameState : State
         _surrenderButton.Position = new Vector2(centerX + gap * 0.8f, secondaryY);
         _insuranceButton.Position = new Vector2(centerX - gap, buttonY);
         _declineInsuranceButton.Position = new Vector2(centerX + gap, buttonY);
+
+        // Betting phase layout
+        var arrowSize = new Vector2(buttonSize.Y * 1.2f, buttonSize.Y);
+        var betCenterY = vp.Height * 0.5f;
+        var betArrowSpacing = buttonSize.X * 0.8f;
+        _betDownButton.Size = arrowSize;
+        _betUpButton.Size = arrowSize;
+        _betDownButton.Position = new Vector2(centerX - betArrowSpacing, betCenterY);
+        _betUpButton.Position = new Vector2(centerX + betArrowSpacing, betCenterY);
+
+        _dealButton.Size = buttonSize;
+        _dealButton.Position = new Vector2(centerX, betCenterY + buttonSize.Y * 1.5f);
+
+        _repeatBetButton.Size = buttonSize;
+        _repeatBetButton.Position = new Vector2(centerX, betCenterY + buttonSize.Y * 2.8f);
+
+        // Bankrupt phase layout
+        _resetBankrollButton.Size = buttonSize;
+        _menuButton.Size = buttonSize;
+        var bankruptY = vp.Height * 0.55f;
+        _resetBankrollButton.Position = new Vector2(centerX - gap * 0.8f, bankruptY);
+        _menuButton.Position = new Vector2(centerX + gap * 0.8f, bankruptY);
     }
 
     private float GetDealerCardsY()
@@ -197,49 +267,91 @@ internal class GameState : State
         return _playerHandCardCounts.Count;
     }
 
+    /// <summary>
+    /// Returns the CENTER position for a card sprite (all sprites now use center-anchor).
+    /// </summary>
     private Vector2 GetCardTargetPosition(string recipient, int handIndex, int cardIndexInHand)
     {
         var vp = _graphicsDevice.Viewport;
-        var spacing = _cardSize.X * 1.15f;
+        var halfCard = _cardSize / 2f;
 
         if (recipient == _dealer.Name)
         {
-            // Dealer: single row, centered
-            var baseX = vp.Width / 2f - _cardSize.X / 2f - spacing * 0.5f;
-            return new Vector2(baseX + spacing * cardIndexInHand, GetDealerCardsY());
+            int dealerTotal = Math.Max(_dealerCardCount, 2);
+            return ComputeRowCardCenter(vp, dealerTotal, cardIndexInHand, GetDealerCardsY() + halfCard.Y);
         }
 
         // Player: hands spread horizontally from center
         int totalHands = GetPlayerHandCount();
+        float centerY = GetPlayerCardsY() + halfCard.Y;
+
         if (totalHands <= 1)
         {
-            // Single hand: centered exactly as before
-            var baseX = vp.Width / 2f - _cardSize.X / 2f - spacing * 0.5f;
-            return new Vector2(baseX + spacing * cardIndexInHand, GetPlayerCardsY());
+            int cardCount = _playerHandCardCounts.GetValueOrDefault(0, 2);
+            return ComputeRowCardCenter(vp, cardCount, cardIndexInHand, centerY);
         }
 
         // Multiple hands: spread horizontally
-        var cardOverlap = _cardSize.X * 0.35f; // Cards within a hand overlap
-        var handGap = _cardSize.X * 1.8f; // Space between hand groups
+        var cardOverlap = _cardSize.X * 0.45f;
+        var handGap = _cardSize.X * 1.8f;
 
         // Calculate total width of all hands
-        float totalWidth = 0;
-        for (int h = 0; h < totalHands; h++)
-        {
-            int cardCount = _playerHandCardCounts.ContainsKey(h) ? _playerHandCardCounts[h] : 2;
-            totalWidth += _cardSize.X + cardOverlap * (cardCount - 1);
-        }
-        totalWidth += handGap * (totalHands - 1);
+        float totalWidth = ComputeMultiHandWidth(totalHands, cardOverlap, handGap);
 
-        // Find x offset for this hand
+        // Adaptive scaling: if total width exceeds viewport, scale down
+        float maxWidth = vp.Width * 0.9f;
+        if (totalWidth > maxWidth)
+        {
+            float scale = maxWidth / totalWidth;
+            cardOverlap *= scale;
+            handGap *= scale;
+            totalWidth = ComputeMultiHandWidth(totalHands, cardOverlap, handGap);
+        }
+
+        // Find x offset for this hand's first card center
         float handStartX = vp.Width / 2f - totalWidth / 2f;
         for (int h = 0; h < handIndex; h++)
         {
-            int cardCount = _playerHandCardCounts.ContainsKey(h) ? _playerHandCardCounts[h] : 2;
-            handStartX += _cardSize.X + cardOverlap * (cardCount - 1) + handGap;
+            int cc = _playerHandCardCounts.GetValueOrDefault(h, 2);
+            handStartX += _cardSize.X + cardOverlap * (cc - 1) + handGap;
         }
 
-        return new Vector2(handStartX + cardOverlap * cardIndexInHand, GetPlayerCardsY());
+        // Card center within this hand
+        float cardCenterX = handStartX + halfCard.X + cardOverlap * cardIndexInHand;
+        return new Vector2(cardCenterX, centerY);
+    }
+
+    /// <summary>
+    /// Computes center position for a card in a single row (dealer or single player hand).
+    /// Adapts overlap when cards would overflow the viewport.
+    /// </summary>
+    private Vector2 ComputeRowCardCenter(Viewport vp, int cardCount, int cardIndex, float centerY)
+    {
+        var halfCard = _cardSize / 2f;
+        var spacing = _cardSize.X * 1.15f;
+
+        // Adaptive: if row overflows viewport, compress spacing
+        float rowWidth = _cardSize.X + spacing * (cardCount - 1);
+        float maxWidth = vp.Width * 0.9f;
+        if (rowWidth > maxWidth && cardCount > 1)
+            spacing = (maxWidth - _cardSize.X) / (cardCount - 1);
+
+        float totalRowWidth = _cardSize.X + spacing * (cardCount - 1);
+        float startX = vp.Width / 2f - totalRowWidth / 2f;
+        float cardCenterX = startX + halfCard.X + spacing * cardIndex;
+        return new Vector2(cardCenterX, centerY);
+    }
+
+    private float ComputeMultiHandWidth(int totalHands, float cardOverlap, float handGap)
+    {
+        float totalWidth = 0;
+        for (int h = 0; h < totalHands; h++)
+        {
+            int cc = _playerHandCardCounts.GetValueOrDefault(h, 2);
+            totalWidth += _cardSize.X + cardOverlap * (cc - 1);
+        }
+        totalWidth += handGap * (totalHands - 1);
+        return totalWidth;
     }
 
     private bool IsPlayerInteractionEnabled()
@@ -310,17 +422,19 @@ internal class GameState : State
 
         if (GetPlayerHandCount() <= 1)
         {
-            // Single hand: centered
-            var midY = (GetDealerCardsY() + _cardSize.Y + GetPlayerCardsY()) / 2f;
+            // Single hand: centered between dealer and player card rows
+            float dealerBottom = GetDealerCardsY() + _cardSize.Y;
+            float playerTop = GetPlayerCardsY();
+            float midY = (dealerBottom + playerTop) / 2f;
             return new Vector2(vp.Width / 2f, midY);
         }
 
         // Multiple hands: position above each hand's column
-        int cardCount = _playerHandCardCounts.ContainsKey(handIndex) ? _playerHandCardCounts[handIndex] : 2;
-        var handCenter = GetCardTargetPosition(_player.Name, handIndex, 0);
-        var cardOverlap = _cardSize.X * 0.35f;
-        float handWidth = _cardSize.X + cardOverlap * (cardCount - 1);
-        float centerX = handCenter.X + handWidth / 2f;
+        // Card positions are now center-anchored, so average of first+last = hand center
+        int cardCount = _playerHandCardCounts.GetValueOrDefault(handIndex, 2);
+        var firstCardCenter = GetCardTargetPosition(_player.Name, handIndex, 0);
+        var lastCardCenter = GetCardTargetPosition(_player.Name, handIndex, cardCount - 1);
+        float centerX = (firstCardCenter.X + lastCardCenter.X) / 2f;
         float labelY = GetPlayerCardsY() - 30f;
 
         return new Vector2(centerX, labelY);
@@ -338,11 +452,12 @@ internal class GameState : State
         }
     }
 
-    private void StartNewRound()
+    private void ClearRoundVisualState()
     {
         _cardLayer.Clear();
         _uiLayer.Clear();
         _trackedCards.Clear();
+        _bustedHands.Clear();
 
         _dealCardIndex = 0;
         _playerHandCardCounts.Clear();
@@ -351,9 +466,41 @@ internal class GameState : State
         _roundCompleteTimer = 0f;
         _waitingForRoundReset = false;
         _activePlayerHandIndex = 0;
+    }
 
+    private void StartNewRound()
+    {
+        ClearRoundVisualState();
+
+        if (GameConfig.BetFlow == BetFlowMode.FreePlay)
+        {
+            _gamePhase = GamePhase.Playing;
+            _round = new GameRound(_shoe, _player, _dealer, _eventBus.Publish);
+            _round.PlaceBet(0);
+            _round.Deal();
+        }
+        else
+        {
+            // Check for bankruptcy
+            if (_player.Bank < GameConfig.MinimumBet)
+            {
+                _gamePhase = GamePhase.Bankrupt;
+                return;
+            }
+
+            _gamePhase = GamePhase.Betting;
+            _pendingBet = Math.Clamp(_pendingBet, GameConfig.MinimumBet,
+                Math.Min(GameConfig.MaximumBet, _player.Bank));
+        }
+    }
+
+    private void DealWithBet(decimal bet)
+    {
+        ClearRoundVisualState();
+        _gamePhase = GamePhase.Playing;
+        _lastBet = bet;
         _round = new GameRound(_shoe, _player, _dealer, _eventBus.Publish);
-        _round.PlaceBet(GameConfig.MinimumBet);
+        _round.PlaceBet(bet);
         _round.Deal();
     }
 
@@ -385,6 +532,7 @@ internal class GameState : State
 
     private void OnPlayerBusted(PlayerBusted evt)
     {
+        _bustedHands.Add(evt.HandIndex);
         var pos = GetOutcomeLabelPosition(evt.HandIndex);
         CreateLabel("BUST", Color.Red, pos);
     }
@@ -483,6 +631,10 @@ internal class GameState : State
 
     private void OnHandResolved(HandResolved evt)
     {
+        // Skip LOSE label for busted hands — they already show BUST
+        if (evt.Outcome == HandOutcome.Lose && _bustedHands.Contains(evt.HandIndex))
+            return;
+
         var (text, color) = evt.Outcome switch
         {
             HandOutcome.Win => ("WIN", Color.Gold),
@@ -501,6 +653,48 @@ internal class GameState : State
     {
         _waitingForRoundReset = true;
         _roundCompleteTimer = 1.5f;
+
+        // For betting mode, check bankruptcy after round ends (bankrupt state set in StartNewRound)
+    }
+
+    private void OnBetDownClicked(object? sender, EventArgs e)
+    {
+        if (_gamePhase != GamePhase.Betting) return;
+        _pendingBet = Math.Max(GameConfig.MinimumBet, _pendingBet - GameConfig.MinimumBet);
+    }
+
+    private void OnBetUpClicked(object? sender, EventArgs e)
+    {
+        if (_gamePhase != GamePhase.Betting) return;
+        var max = Math.Min(GameConfig.MaximumBet, _player.Bank);
+        _pendingBet = Math.Min(max, _pendingBet + GameConfig.MinimumBet);
+    }
+
+    private void OnDealClicked(object? sender, EventArgs e)
+    {
+        if (_gamePhase != GamePhase.Betting) return;
+        DealWithBet(_pendingBet);
+    }
+
+    private void OnRepeatBetClicked(object? sender, EventArgs e)
+    {
+        if (_gamePhase != GamePhase.Betting) return;
+        if (_lastBet <= 0) return;
+        var bet = Math.Clamp(_lastBet, GameConfig.MinimumBet, Math.Min(GameConfig.MaximumBet, _player.Bank));
+        DealWithBet(bet);
+    }
+
+    private void OnResetBankrollClicked(object? sender, EventArgs e)
+    {
+        if (_gamePhase != GamePhase.Bankrupt) return;
+        _player.Bank = GameConfig.StartingBank;
+        _pendingBet = GameConfig.MinimumBet;
+        _gamePhase = GamePhase.Betting;
+    }
+
+    private void OnMenuClicked(object? sender, EventArgs e)
+    {
+        _game.ChangeState(new MenuState(_game, _graphicsDevice, _content));
     }
 
     private void OnHitClicked(object? sender, EventArgs e)
@@ -576,6 +770,23 @@ internal class GameState : State
 
     public override void Update(GameTime gameTime)
     {
+        if (_gamePhase == GamePhase.Betting)
+        {
+            _betDownButton.Update(gameTime);
+            _betUpButton.Update(gameTime);
+            _dealButton.Update(gameTime);
+            if (_lastBet > 0)
+                _repeatBetButton.Update(gameTime);
+            return;
+        }
+
+        if (_gamePhase == GamePhase.Bankrupt)
+        {
+            _resetBankrollButton.Update(gameTime);
+            _menuButton.Update(gameTime);
+            return;
+        }
+
         _eventBus.Flush();
 
         if (IsPlayerInteractionEnabled())
@@ -610,11 +821,58 @@ internal class GameState : State
 
     public override void Draw(GameTime gameTime, SpriteBatch spriteBatch)
     {
+        var vp = _graphicsDevice.Viewport;
+        bool isBettingMode = GameConfig.BetFlow == BetFlowMode.Betting;
+
+        if (_gamePhase == GamePhase.Betting)
+        {
+            spriteBatch.Begin();
+            DrawHud(spriteBatch, vp);
+
+            // Bet amount display centered between arrows
+            var betText = $"${_pendingBet}";
+            var betTextSize = _font.MeasureString(betText);
+            var betTextPos = new Vector2(vp.Width / 2f - betTextSize.X / 2f, vp.Height * 0.5f - betTextSize.Y / 2f);
+            spriteBatch.DrawString(_font, betText, betTextPos, Color.Gold);
+
+            var betLabel = "Place Your Bet";
+            var labelSize = _font.MeasureString(betLabel) * 0.8f;
+            var labelPos = new Vector2(vp.Width / 2f - labelSize.X / 2f, vp.Height * 0.5f - betTextSize.Y - 20f);
+            spriteBatch.DrawString(_font, betLabel, labelPos, Color.White, 0f, Vector2.Zero, 0.8f, SpriteEffects.None, 0f);
+
+            _betDownButton.Draw(gameTime, spriteBatch);
+            _betUpButton.Draw(gameTime, spriteBatch);
+            _dealButton.Draw(gameTime, spriteBatch);
+            if (_lastBet > 0)
+                _repeatBetButton.Draw(gameTime, spriteBatch);
+
+            spriteBatch.End();
+            return;
+        }
+
+        if (_gamePhase == GamePhase.Bankrupt)
+        {
+            spriteBatch.Begin();
+
+            var outText = "Out of Funds";
+            var outSize = _font.MeasureString(outText);
+            var outPos = new Vector2(vp.Width / 2f - outSize.X / 2f, vp.Height * 0.4f);
+            spriteBatch.DrawString(_font, outText, outPos, Color.Red);
+
+            _resetBankrollButton.Draw(gameTime, spriteBatch);
+            _menuButton.Draw(gameTime, spriteBatch);
+
+            spriteBatch.End();
+            return;
+        }
+
+        // Playing phase
         _sceneRenderer.Draw(spriteBatch);
 
         if (IsPlayerInteractionEnabled())
         {
             spriteBatch.Begin();
+            if (isBettingMode) DrawHud(spriteBatch, vp);
             _hitButton.Draw(gameTime, spriteBatch);
             _standButton.Draw(gameTime, spriteBatch);
             if (_round.CanSplit())
@@ -633,35 +891,58 @@ internal class GameState : State
         else if (IsInsuranceInteractionEnabled())
         {
             spriteBatch.Begin();
+            if (isBettingMode) DrawHud(spriteBatch, vp);
             _insuranceButton.Draw(gameTime, spriteBatch);
             _declineInsuranceButton.Draw(gameTime, spriteBatch);
             spriteBatch.End();
+        }
+        else if (isBettingMode)
+        {
+            // Draw HUD during dealer turn / resolution too
+            spriteBatch.Begin();
+            DrawHud(spriteBatch, vp);
+            spriteBatch.End();
+        }
+    }
+
+    private void DrawHud(SpriteBatch spriteBatch, Viewport vp)
+    {
+        var bankText = $"Bank: ${_player.Bank}";
+        var bankSize = _font.MeasureString(bankText) * 0.7f;
+        spriteBatch.DrawString(_font, bankText, new Vector2(12f, 8f), Color.White, 0f, Vector2.Zero, 0.7f, SpriteEffects.None, 0f);
+
+        if (_gamePhase == GamePhase.Playing && _round != null!)
+        {
+            var betText = $"Bet: ${_lastBet}";
+            var betSize = _font.MeasureString(betText) * 0.7f;
+            spriteBatch.DrawString(_font, betText, new Vector2(vp.Width - betSize.X - 12f, 8f), Color.Gold, 0f, Vector2.Zero, 0.7f, SpriteEffects.None, 0f);
         }
     }
 
     private void DrawActiveHandIndicator(SpriteBatch spriteBatch)
     {
-        int cardCount = _playerHandCardCounts.ContainsKey(_activePlayerHandIndex)
-            ? _playerHandCardCounts[_activePlayerHandIndex] : 2;
+        int cardCount = _playerHandCardCounts.GetValueOrDefault(_activePlayerHandIndex, 2);
 
-        var firstCardPos = GetCardTargetPosition(_player.Name, _activePlayerHandIndex, 0);
-        var cardOverlap = _cardSize.X * 0.35f;
-        float handWidth = _cardSize.X + cardOverlap * (cardCount - 1);
+        var firstCardCenter = GetCardTargetPosition(_player.Name, _activePlayerHandIndex, 0);
+        var lastCardCenter = GetCardTargetPosition(_player.Name, _activePlayerHandIndex, cardCount - 1);
+        float handCenterX = (firstCardCenter.X + lastCardCenter.X) / 2f;
 
+        float triangleHeight = 10f;
+        float triangleHalfWidth = 8f;
         float indicatorY = GetPlayerCardsY() + _cardSize.Y + 8f;
-        float indicatorHeight = 4f;
 
-        var rect = new Rectangle(
-            (int)firstCardPos.X,
-            (int)indicatorY,
-            (int)handWidth,
-            (int)indicatorHeight);
+        // Draw upward-pointing triangle using horizontal line strips
+        int rows = (int)triangleHeight;
+        for (int row = 0; row < rows; row++)
+        {
+            float t = row / triangleHeight;
+            float rowWidth = triangleHalfWidth * 2f * (1f - t);
+            float x = handCenterX - rowWidth / 2f;
+            float y = indicatorY + triangleHeight - 1 - row;
 
-        // Draw a simple colored rectangle using a 1x1 white pixel
-        var pixel = new Texture2D(_graphicsDevice, 1, 1);
-        pixel.SetData(new[] { Color.Gold });
-        spriteBatch.Draw(pixel, rect, Color.Gold);
-        pixel.Dispose();
+            var rect = new Rectangle((int)x, (int)y, (int)rowWidth, 1);
+            spriteBatch.Draw(_pixelTexture, rect, Color.Gold);
+        }
     }
 
     public override void HandleResize(Rectangle vp)
@@ -681,6 +962,14 @@ internal class GameState : State
     }
 
     public override void PostUpdate(GameTime gameTime) { }
+
+    public override void Dispose()
+    {
+        _eventBus.Clear();
+        _tweenManager.Clear();
+        _cardLayer.Clear();
+        _uiLayer.Clear();
+    }
 
     private readonly record struct TrackedCardSprite(CardSprite Sprite, string Recipient, int HandIndex, int CardIndexInHand);
 }

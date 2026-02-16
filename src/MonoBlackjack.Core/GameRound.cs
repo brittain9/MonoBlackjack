@@ -34,6 +34,23 @@ public class GameRound
     private Hand CurrentHand => _player.Hands[_currentHandIndex];
     private decimal CurrentBet => _bets[_currentHandIndex];
 
+    /// <summary>
+    /// Total wagers committed this round (all hands + insurance).
+    /// Used to check affordability for splits/doubles.
+    /// </summary>
+    private decimal TotalCommitted
+    {
+        get
+        {
+            decimal total = _insuranceBet;
+            foreach (var bet in _bets.Values)
+                total += bet;
+            return total;
+        }
+    }
+
+    private decimal AvailableFunds => _player.Bank - TotalCommitted;
+
     public GameRound(Shoe shoe, Human player, Dealer dealer, Action<GameEvent> publish)
     {
         _shoe = shoe;
@@ -47,7 +64,19 @@ public class GameRound
         if (Phase != RoundPhase.Betting)
             throw new InvalidOperationException($"Cannot place bet in phase {Phase}");
 
-        var bet = Math.Clamp(amount, GameConfig.MinimumBet, GameConfig.MaximumBet);
+        if (amount == 0)
+        {
+            // Free play mode — no bankroll involved
+            _bets[0] = 0;
+            _publish(new BetPlaced(_player.Name, 0));
+            Phase = RoundPhase.Dealing;
+            return;
+        }
+
+        if (_player.Bank < GameConfig.MinimumBet)
+            throw new InvalidOperationException("Insufficient bankroll to place minimum bet.");
+
+        var bet = Math.Clamp(amount, GameConfig.MinimumBet, Math.Min(GameConfig.MaximumBet, _player.Bank));
         _bets[0] = bet;
         _publish(new BetPlaced(_player.Name, bet));
         Phase = RoundPhase.Dealing;
@@ -366,8 +395,8 @@ public class GameRound
         if (hand.Cards[0].Rank == Rank.Ace && _splitCount > 0 && !GameConfig.ResplitAces)
             return false;
 
-        // Player must have enough bank for additional bet
-        if (_player.Bank < _bets[_currentHandIndex])
+        // Player must have enough available funds for additional bet
+        if (AvailableFunds < _bets[_currentHandIndex])
             return false;
 
         return true;
@@ -400,7 +429,7 @@ public class GameRound
         if (_splitCount > 0 && !GameConfig.DoubleAfterSplit)
             return false;
 
-        return _player.Bank >= _bets[_currentHandIndex];
+        return AvailableFunds >= _bets[_currentHandIndex];
     }
 
     public bool CanSurrender()

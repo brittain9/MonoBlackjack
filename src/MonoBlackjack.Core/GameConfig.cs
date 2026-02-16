@@ -9,6 +9,12 @@ public enum DoubleDownRestriction
     TenToEleven
 }
 
+public enum BetFlowMode
+{
+    Betting,
+    FreePlay
+}
+
 /// <summary>
 /// Global game configuration. All rules are configurable for simulation/testing.
 /// </summary>
@@ -23,6 +29,7 @@ public static class GameConfig
     public const string SettingMaxSplits = "MaxSplits";
     public const string SettingDoubleDownRestriction = "DoubleDownRestriction";
     public const string SettingPenetrationPercent = "PenetrationPercent";
+    public const string SettingBetFlow = "BetFlow";
 
     /// <summary>
     /// Bust threshold. Standard blackjack = 21.
@@ -54,7 +61,7 @@ public static class GameConfig
     /// <summary>
     /// Starting bankroll for human players.
     /// </summary>
-    public static int StartingBank = 1000;
+    public static decimal StartingBank = 1000m;
 
     /// <summary>
     /// True = dealer hits on soft 17 (H17, worse for player).
@@ -112,6 +119,11 @@ public static class GameConfig
     /// </summary>
     public static decimal MaximumBet = 500m;
 
+    /// <summary>
+    /// Betting flow mode. Betting = manual bet selection, FreePlay = auto-deal with no bankroll.
+    /// </summary>
+    public static BetFlowMode BetFlow = BetFlowMode.Betting;
+
     public static IReadOnlyDictionary<string, string> ToSettingsDictionary()
     {
         return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -124,7 +136,8 @@ public static class GameConfig
             [SettingResplitAces] = ResplitAces.ToString(),
             [SettingMaxSplits] = MaxSplits.ToString(CultureInfo.InvariantCulture),
             [SettingDoubleDownRestriction] = DoubleDownRestriction.ToString(),
-            [SettingPenetrationPercent] = PenetrationPercent.ToString(CultureInfo.InvariantCulture)
+            [SettingPenetrationPercent] = PenetrationPercent.ToString(CultureInfo.InvariantCulture),
+            [SettingBetFlow] = BetFlow.ToString()
         };
     }
 
@@ -181,6 +194,12 @@ public static class GameConfig
             && int.TryParse(penetrationPercent, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedPenetration))
         {
             PenetrationPercent = Math.Clamp(parsedPenetration, 1, 100);
+        }
+
+        if (settings.TryGetValue(SettingBetFlow, out var betFlow)
+            && Enum.TryParse<BetFlowMode>(betFlow, ignoreCase: true, out var parsedBetFlow))
+        {
+            BetFlow = parsedBetFlow;
         }
     }
 

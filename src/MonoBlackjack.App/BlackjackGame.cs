@@ -17,10 +17,12 @@ public class BlackjackGame : Microsoft.Xna.Framework.Game
     private IProfileRepository _profileRepository = null!;
     private IStatsRepository _statsRepository = null!;
     private ISettingsRepository _settingsRepository = null!;
+    private Texture2D _pixelTexture = null!;
 
     public void ChangeState(State state) => _nextState = state;
     public IStatsRepository StatsRepository => _statsRepository;
     public ISettingsRepository SettingsRepository => _settingsRepository;
+    public Texture2D PixelTexture => _pixelTexture;
     public int ActiveProfileId { get; private set; }
 
     public BlackjackGame()
@@ -58,6 +60,9 @@ public class BlackjackGame : Microsoft.Xna.Framework.Game
         if (persistedSettings.Count > 0)
             GameConfig.ApplySettings(persistedSettings);
 
+        _pixelTexture = new Texture2D(GraphicsDevice, 1, 1);
+        _pixelTexture.SetData(new[] { Color.White });
+
         _spriteBatch = new SpriteBatch(GraphicsDevice);
         _currentState = new MenuState(this, _graphics.GraphicsDevice, Content);
     }
@@ -66,6 +71,7 @@ public class BlackjackGame : Microsoft.Xna.Framework.Game
     {
         if (_nextState != null)
         {
+            _currentState.Dispose();
             _currentState = _nextState;
             _nextState = null;
         }

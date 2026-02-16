@@ -50,16 +50,11 @@ public static class TweenBuilder
     public static Tween FlipX(Sprite sprite, float duration, float delay,
         Action? onMidpoint = null)
     {
-        Vector2? restPosition = null;
-        float? halfWidth = null;
         bool midpointFired = false;
 
         return new Tween(duration, delay, Easing.Linear,
             t =>
             {
-                restPosition ??= sprite.Position;
-                halfWidth ??= sprite.Size.X * sprite.Scale * 0.5f;
-
                 float scaleX;
                 if (t < 0.5f)
                 {
@@ -80,10 +75,8 @@ public static class TweenBuilder
                     scaleX = Easing.EaseOutQuad(phase);
                 }
 
+                // Center-anchored sprites stay centered as ScaleX changes
                 sprite.ScaleX = scaleX;
-                sprite.Position = new Vector2(
-                    restPosition.Value.X + halfWidth.Value * (1f - scaleX),
-                    restPosition.Value.Y);
             });
     }
 }

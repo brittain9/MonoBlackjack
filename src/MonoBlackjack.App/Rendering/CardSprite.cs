@@ -29,13 +29,9 @@ public class CardSprite : Sprite
         if (texture == null)
             return;
 
-        var destRect = new Rectangle(
-            (int)Position.X, (int)Position.Y,
-            (int)(Size.X * Scale * ScaleX), (int)(Size.Y * Scale));
-
         spriteBatch.Draw(
             texture,
-            destRect,
+            DestRect,
             null,
             Color.White * Opacity,
             Rotation,

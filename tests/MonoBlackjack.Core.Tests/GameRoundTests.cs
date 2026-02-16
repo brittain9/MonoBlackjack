@@ -5,6 +5,7 @@ using MonoBlackjack.Core.Players;
 
 namespace MonoBlackjack.Core.Tests;
 
+[Collection("GameConfig")]
 public class GameRoundTests
 {
     private readonly List<GameEvent> _events = [];

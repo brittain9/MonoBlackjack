@@ -21,6 +21,7 @@ internal sealed class StatsRecorder
     private string _dealerUpcard = "?";
     private DateTime _roundStartedUtc;
     private bool _roundOpen;
+    private bool _dealerBusted;
 
     public StatsRecorder(EventBus eventBus, IStatsRepository statsRepository, int profileId)
     {
@@ -35,6 +36,7 @@ internal sealed class StatsRecorder
         eventBus.Subscribe<PlayerSplit>(OnPlayerSplit);
         eventBus.Subscribe<PlayerSurrendered>(OnPlayerSurrendered);
         eventBus.Subscribe<DealerHit>(OnDealerHit);
+        eventBus.Subscribe<DealerBusted>(OnDealerBusted);
         eventBus.Subscribe<InsuranceResult>(OnInsuranceResult);
         eventBus.Subscribe<HandResolved>(OnHandResolved);
         eventBus.Subscribe<RoundComplete>(OnRoundComplete);
@@ -157,6 +159,14 @@ internal sealed class StatsRecorder
             false));
     }
 
+    private void OnDealerBusted(DealerBusted evt)
+    {
+        if (!_roundOpen)
+            return;
+
+        _dealerBusted = true;
+    }
+
     private void OnInsuranceResult(InsuranceResult evt)
     {
         if (!_roundOpen)
@@ -202,6 +212,7 @@ internal sealed class StatsRecorder
             PlayedAtUtc: _roundStartedUtc,
             BetAmount: _betAmount,
             NetPayout: _handResults.Sum(x => x.Payout) + _insurancePayoutTotal,
+            DealerBusted: _dealerBusted,
             Rules: ruleFingerprint,
             HandResults: _handResults.ToList(),
             CardsSeen: _cardsSeen.ToList(),
@@ -257,6 +268,7 @@ internal sealed class StatsRecorder
         _dealerCards.Clear();
         _betAmount = 0;
         _insurancePayoutTotal = 0;
+        _dealerBusted = false;
         _dealerUpcard = "?";
         _roundStartedUtc = DateTime.UtcNow;
     }

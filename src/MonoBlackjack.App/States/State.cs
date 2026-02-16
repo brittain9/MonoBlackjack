@@ -4,13 +4,11 @@ using Microsoft.Xna.Framework.Graphics;
 
 namespace MonoBlackjack
 {
-    public abstract class State
+    public abstract class State : IDisposable
     {
         protected ContentManager _content;
         protected GraphicsDevice _graphicsDevice;
         protected BlackjackGame _game;
-        // scale the game to be at a correct size for a given resolution
-        protected int _scale;
 
         public abstract void Draw(GameTime gameTime, SpriteBatch spriteBatch);
         public abstract void PostUpdate(GameTime gameTime);
@@ -23,5 +21,7 @@ namespace MonoBlackjack
         public abstract void Update(GameTime gameTime);
 
         public abstract void HandleResize(Rectangle vp);
+
+        public virtual void Dispose() { }
     }
 }

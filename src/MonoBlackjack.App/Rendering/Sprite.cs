@@ -20,18 +20,30 @@ public class Sprite
     public int ZOrder { get; set; }
     public float Depth { get; set; }
 
+    /// <summary>
+    /// Destination rectangle centered on Position.
+    /// </summary>
+    public Rectangle DestRect
+    {
+        get
+        {
+            var w = (int)(Size.X * Scale * ScaleX);
+            var h = (int)(Size.Y * Scale);
+            return new Rectangle(
+                (int)Position.X - w / 2,
+                (int)Position.Y - h / 2,
+                w, h);
+        }
+    }
+
     public virtual void Draw(SpriteBatch spriteBatch)
     {
         if (!Visible || Texture == null || Opacity <= 0f)
             return;
 
-        var destRect = new Rectangle(
-            (int)Position.X, (int)Position.Y,
-            (int)(Size.X * Scale * ScaleX), (int)(Size.Y * Scale));
-
         spriteBatch.Draw(
             Texture,
-            destRect,
+            DestRect,
             null,
             Color.White * Opacity,
             Rotation,

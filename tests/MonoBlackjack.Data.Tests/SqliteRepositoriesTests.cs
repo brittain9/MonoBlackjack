@@ -151,6 +151,7 @@ public sealed class SqliteRepositoriesTests
             PlayedAtUtc: DateTime.UtcNow,
             BetAmount: bet,
             NetPayout: payout,
+            DealerBusted: false,
             Rules: rules,
             HandResults:
             [

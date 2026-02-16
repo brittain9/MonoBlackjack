@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Content;
@@ -8,124 +8,91 @@ namespace MonoBlackjack;
 
 internal class MenuState : State
 {
-    private List<Component> _components = null!;
+    private readonly Texture2D _logoTexture;
+    private readonly Button _playButton;
+    private readonly Button _settingsButton;
+    private readonly Button _statsButton;
+    private readonly Button _quitButton;
+    private readonly List<Button> _buttons;
+    private Rectangle _logoRect;
 
-    private Texture2D logoTexture = null!;
-    private Rectangle logoRect;
-
-    public int CompSpacing;
-
-    public MenuState(BlackjackGame game, GraphicsDevice graphicsDevice, ContentManager content) : base(game, graphicsDevice, content)
+    public MenuState(BlackjackGame game, GraphicsDevice graphicsDevice, ContentManager content)
+        : base(game, graphicsDevice, content)
     {
-        IntializeMainMenu(graphicsDevice, content);
+        _logoTexture = content.Load<Texture2D>("Art/menuLogo");
+
+        var buttonTexture = content.Load<Texture2D>("Controls/Button");
+        var buttonFont = content.Load<SpriteFont>("Fonts/MyFont");
+
+        _playButton = new Button(buttonTexture, buttonFont) { Text = "Play", PenColor = Color.Black };
+        _settingsButton = new Button(buttonTexture, buttonFont) { Text = "Settings", PenColor = Color.Black };
+        _statsButton = new Button(buttonTexture, buttonFont) { Text = "Stats", PenColor = Color.Black };
+        _quitButton = new Button(buttonTexture, buttonFont) { Text = "Quit", PenColor = Color.Black };
+
+        _playButton.Click += (_, _) =>
+            _game.ChangeState(new GameState(_game, _graphicsDevice, _content, _game.StatsRepository, _game.ActiveProfileId));
+        _settingsButton.Click += (_, _) =>
+            _game.ChangeState(new SettingsState(_game, _graphicsDevice, _content, _game.SettingsRepository, _game.ActiveProfileId));
+        _statsButton.Click += (_, _) =>
+            _game.ChangeState(new StatsState(_game, _graphicsDevice, _content, _game.StatsRepository, _game.ActiveProfileId));
+        _quitButton.Click += (_, _) => _game.Exit();
+
+        _buttons = [_playButton, _settingsButton, _statsButton, _quitButton];
+
+        UpdateLayout();
     }
 
-    public void IntializeMainMenu(GraphicsDevice graphicsDevice, ContentManager content)
+    private void UpdateLayout()
     {
-        CompSpacing = graphicsDevice.Viewport.Height / 15;
+        var vp = _graphicsDevice.Viewport;
+        int spacing = vp.Height / 15;
 
-        logoTexture = content.Load<Texture2D>("Art/menuLogo");
-        logoRect = new Rectangle(
-            graphicsDevice.Viewport.Width / 2, // middle screen width
-            graphicsDevice.Viewport.Height / 3, // space down from screen
-            graphicsDevice.Viewport.Width / 2, // size of logo scaled to screen size
-            graphicsDevice.Viewport.Height / 2); 
+        _logoRect = new Rectangle(
+            vp.Width / 2,
+            vp.Height / 3,
+            vp.Width / 2,
+            vp.Height / 2);
 
-        var buttonTexture = _content.Load<Texture2D>("Controls/Button");
-        var buttonFont = _content.Load<SpriteFont>("Fonts/MyFont");
-        Vector2 buttonSize = new Vector2(graphicsDevice.Viewport.Width / 4, graphicsDevice.Viewport.Height / 20);
+        var buttonSize = new Vector2(vp.Width / 4f, vp.Height / 20f);
+        float startY = _logoRect.Y + spacing * 3;
 
-        // This button will be after the below the logo
-        var playButton = new Button(buttonTexture, buttonFont)
+        for (int i = 0; i < _buttons.Count; i++)
         {
-            Position = new Vector2(logoRect.X, logoRect.Y + CompSpacing * 3),
-            Text = "Play",
-            Size = buttonSize,
-            PenColor = Color.Black
-        };
-        playButton.Click += (s, e) => 
-        { 
-            _game.ChangeState(new GameState(
-                _game,
-                _graphicsDevice,
-                content,
-                _game.StatsRepository,
-                _game.ActiveProfileId)); 
-        };
-
-        var settingsButton = new Button(buttonTexture, buttonFont)
-        {
-            Position = new Vector2(playButton.Position.X, playButton.Position.Y + CompSpacing),
-            Text = "Settings",
-            Size = buttonSize,
-            PenColor = Color.Black
-        };
-        settingsButton.Click += (s, e) =>
-        {
-            _game.ChangeState(new SettingsState(
-                _game,
-                _graphicsDevice,
-                content,
-                _game.SettingsRepository,
-                _game.ActiveProfileId));
-        };
-
-        // This button is below the settings button
-        var quitGameButton = new Button(buttonTexture, buttonFont)
-        {
-            Position = new Vector2(settingsButton.Position.X, settingsButton.Position.Y + CompSpacing),
-            Text = "Quit",
-            Size = buttonSize,
-            PenColor = Color.Black
-        };
-        quitGameButton.Click += (s, e) => 
-        { 
-            _game.Exit(); 
-        };
-
-        _components = new List<Component>()
-        {
-            playButton, settingsButton, quitGameButton,
-        };
+            _buttons[i].Size = buttonSize;
+            _buttons[i].Position = new Vector2(_logoRect.X, startY + spacing * i);
+        }
     }
 
     public override void Draw(GameTime gameTime, SpriteBatch spriteBatch)
     {
         spriteBatch.Begin();
-        // Draw logo
+
         spriteBatch.Draw(
-            logoTexture,
-            logoRect,
+            _logoTexture,
+            _logoRect,
             null,
             Color.White,
             0f,
-            new Vector2(logoTexture.Width / 2, logoTexture.Height / 2),
+            new Vector2(_logoTexture.Width / 2, _logoTexture.Height / 2),
             SpriteEffects.None,
             0f);
 
-        // Draw buttons
-        foreach (var component in _components)
-        {
-            component.Draw(gameTime, spriteBatch);
-        }
+        foreach (var button in _buttons)
+            button.Draw(gameTime, spriteBatch);
+
         spriteBatch.End();
     }
 
-    public override void PostUpdate(GameTime gameTime)
-    {
-        // remove sprites if they are not needed
-    }
+    public override void PostUpdate(GameTime gameTime) { }
 
     public override void Update(GameTime gameTime)
     {
-        foreach (var component in _components)
-        {
-            component.Update(gameTime);
-        }
+        foreach (var button in _buttons)
+            button.Update(gameTime);
     }
 
     public override void HandleResize(Rectangle vp)
     {
-        IntializeMainMenu(_graphicsDevice, _content);
-    } 
+        UpdateLayout();
+    }
 }

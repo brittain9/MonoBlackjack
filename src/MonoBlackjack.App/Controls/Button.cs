@@ -56,19 +56,25 @@ namespace MonoBlackjack
 
             if(!string.IsNullOrEmpty(Text))
             {
+                var padding = 8f;
+                var maxWidth = DestRect.Width - padding * 2;
+                var maxHeight = DestRect.Height - padding * 2;
                 var textSize = _font.MeasureString(Text);
+                var scale = Math.Min(1f, Math.Min(maxWidth / textSize.X, maxHeight / textSize.Y));
+
+                var scaledSize = textSize * scale;
                 var textPosition = new Vector2(
-                    DestRect.Center.X - textSize.X / 2f,
-                    DestRect.Center.Y - textSize.Y / 2f);
+                    DestRect.Center.X - scaledSize.X / 2f,
+                    DestRect.Center.Y - scaledSize.Y / 2f);
 
                 spriteBatch.DrawString(
-                    _font, 
-                    Text, 
-                    textPosition, 
+                    _font,
+                    Text,
+                    textPosition,
                     PenColor,
-                    0f, 
+                    0f,
                     Vector2.Zero,
-                    1f, 
+                    scale,
                     SpriteEffects.None,
                     0f);
             }
