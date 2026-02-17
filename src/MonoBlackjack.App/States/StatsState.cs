@@ -44,6 +44,12 @@ internal sealed class StatsState : State
     private IReadOnlyList<CardFrequency> _cardDistribution = [];
 
     private static readonly string[] UpcardOrder = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "T"];
+    private static readonly Color DashboardSurface = new(8, 12, 18, 216);
+    private static readonly Color ChartSurface = new(14, 22, 31, 230);
+    private static readonly Color PrimaryText = new(236, 242, 248);
+    private static readonly Color SecondaryText = new(183, 197, 214);
+    private static readonly Color DividerColor = new(104, 126, 148, 118);
+    private static readonly Color MatrixLowSampleColor = new(68, 78, 92, 208);
 
     public StatsState(
         BlackjackGame game,
@@ -108,7 +114,7 @@ internal sealed class StatsState : State
         if (_activeTab == Tab.Overview)
             DrawOverview(spriteBatch);
         else
-            DrawAnalysis(spriteBatch);
+            DrawAnalysis(gameTime, spriteBatch);
 
         spriteBatch.End();
         _graphicsDevice.ScissorRectangle = savedScissor;
@@ -225,7 +231,7 @@ internal sealed class StatsState : State
         float scale = GetResponsiveScale(1.0f);
         var size = _font.MeasureString(title) * scale;
         sb.DrawString(_font, title, new Vector2(vp.Width / 2f - size.X / 2f, vp.Height * 0.015f),
-            Color.White, 0f, Vector2.Zero, scale, SpriteEffects.None, 0f);
+            PrimaryText, 0f, Vector2.Zero, scale, SpriteEffects.None, 0f);
     }
 
     private void DrawTabButtons(GameTime gameTime, SpriteBatch sb)
@@ -246,6 +252,8 @@ internal sealed class StatsState : State
         var vp = _graphicsDevice.Viewport;
         float leftX = vp.Width * 0.06f;
         float contentTop = vp.Height * 0.13f;
+        float contentWidth = vp.Width * 0.88f;
+        float contentBottom = vp.Height * 0.86f;
 
         if (_overview.TotalRounds == 0)
         {
@@ -253,56 +261,86 @@ internal sealed class StatsState : State
             var emptySize = _font.MeasureString("No rounds played yet.") * emptyScale;
             sb.DrawString(_font, "No rounds played yet.",
                 new Vector2(vp.Width / 2f - emptySize.X / 2f, vp.Height * 0.4f),
-                Color.Gray, 0f, Vector2.Zero, emptyScale, SpriteEffects.None, 0f);
+                SecondaryText, 0f, Vector2.Zero, emptyScale, SpriteEffects.None, 0f);
             return;
         }
 
-        // Hero number: Net Profit
-        string profitStr = _overview.NetProfit >= 0
-            ? $"+${_overview.NetProfit:F0}"
-            : $"-${Math.Abs(_overview.NetProfit):F0}";
+        sb.Draw(_pixelTexture,
+            new Rectangle((int)leftX, (int)(contentTop - 6f), (int)contentWidth, (int)(contentBottom - contentTop)),
+            DashboardSurface);
+
+        var bankrollSummary = ComputeBankrollSummary(_bankrollHistory);
+
+        string profitStr = FormatSignedCurrency(_overview.NetProfit);
         Color profitColor = _overview.NetProfit >= 0 ? Color.LightGreen : Color.Salmon;
-        float heroScale = GetResponsiveScale(1.3f);
+        float heroLabelScale = GetResponsiveScale(0.55f);
+        float heroScale = GetResponsiveScale(1.65f);
+        const string profitLabel = "Net Profit";
+        var heroLabelSize = _font.MeasureString(profitLabel) * heroLabelScale;
+        float heroLabelY = contentTop + 8f;
+        sb.DrawString(_font, profitLabel,
+            new Vector2(vp.Width / 2f - heroLabelSize.X / 2f, heroLabelY),
+            SecondaryText, 0f, Vector2.Zero, heroLabelScale, SpriteEffects.None, 0f);
+
         var heroSize = _font.MeasureString(profitStr) * heroScale;
+        float heroY = heroLabelY + heroLabelSize.Y + 4f;
         sb.DrawString(_font, profitStr,
-            new Vector2(vp.Width / 2f - heroSize.X / 2f, contentTop),
+            new Vector2(vp.Width / 2f - heroSize.X / 2f, heroY),
             profitColor, 0f, Vector2.Zero, heroScale, SpriteEffects.None, 0f);
 
-        // Sub-headline
-        string subLine = $"{_overview.TotalRounds} rounds   {_overview.TotalSessions} sessions";
+        const string bankrollLabel = "Bankroll Delta";
+        string bankrollStr = FormatSignedCurrency(bankrollSummary.Latest);
+        float bankrollLabelScale = GetResponsiveScale(0.5f);
+        float bankrollScale = GetResponsiveScale(1.2f);
+        var bankrollLabelSize = _font.MeasureString(bankrollLabel) * bankrollLabelScale;
+        float bankrollLabelY = heroY + heroSize.Y + 6f;
+        sb.DrawString(_font, bankrollLabel,
+            new Vector2(vp.Width / 2f - bankrollLabelSize.X / 2f, bankrollLabelY),
+            SecondaryText, 0f, Vector2.Zero, bankrollLabelScale, SpriteEffects.None, 0f);
+
+        var bankrollSize = _font.MeasureString(bankrollStr) * bankrollScale;
+        float bankrollY = bankrollLabelY + bankrollLabelSize.Y + 2f;
+        Color bankrollColor = bankrollSummary.Latest >= 0 ? Color.LightGreen : Color.Salmon;
+        sb.DrawString(_font, bankrollStr,
+            new Vector2(vp.Width / 2f - bankrollSize.X / 2f, bankrollY),
+            bankrollColor, 0f, Vector2.Zero, bankrollScale, SpriteEffects.None, 0f);
+
+        string subLine = $"{_overview.TotalRounds} rounds   {_overview.TotalSessions} sessions   Peak {FormatSignedCurrency(bankrollSummary.Peak)}";
         float subScale = GetResponsiveScale(0.6f);
         var subSize = _font.MeasureString(subLine) * subScale;
+        float subY = bankrollY + bankrollSize.Y + 6f;
         sb.DrawString(_font, subLine,
-            new Vector2(vp.Width / 2f - subSize.X / 2f, contentTop + heroSize.Y + 4f),
-            Color.LightGray, 0f, Vector2.Zero, subScale, SpriteEffects.None, 0f);
+            new Vector2(vp.Width / 2f - subSize.X / 2f, subY),
+            SecondaryText, 0f, Vector2.Zero, subScale, SpriteEffects.None, 0f);
 
-        // Bankroll chart
-        float chartTop = contentTop + heroSize.Y + subSize.Y + 16f;
-        float chartHeight = vp.Height * 0.22f;
-        float chartLeft = vp.Width * 0.08f;
-        float chartRight = vp.Width * 0.92f;
-        float chartWidth = chartRight - chartLeft;
+        float firstDividerY = subY + subSize.Y + 10f;
+        DrawHorizontalDivider(sb, leftX + 10f, firstDividerY, contentWidth - 20f);
+
+        float chartTop = firstDividerY + 12f;
+        float chartHeight = Math.Clamp(vp.Height * 0.24f, 130f, 320f);
+        float chartLeft = leftX + contentWidth * 0.02f;
+        float chartWidth = contentWidth * 0.96f;
 
         DrawBankrollChart(sb, chartLeft, chartTop, chartWidth, chartHeight);
 
-        // Stats grid below chart
-        float gridTop = chartTop + chartHeight + 20f;
-        float colWidth = vp.Width * 0.3f;
-        float statScale = GetResponsiveScale(0.55f);
-        float lineHeight = _font.MeasureString("A").Y * statScale + 6f;
+        float secondDividerY = chartTop + chartHeight + 12f;
+        DrawHorizontalDivider(sb, leftX + 10f, secondDividerY, contentWidth - 20f);
+
+        float gridTop = secondDividerY + 14f;
+        float colWidth = contentWidth / 3f;
+        float statScale = GetResponsiveScale(0.58f);
+        float lineHeight = _font.MeasureString("A").Y * statScale + Math.Clamp(vp.Height * 0.012f, 8f, 16f);
 
         int totalHands = _overview.Wins + _overview.Losses + _overview.Pushes + _overview.Blackjacks + _overview.Surrenders;
 
-        // Column 1: Win/Loss/Push
-        float col1 = leftX;
+        float col1 = leftX + 8f;
         DrawStatLine(sb, col1, gridTop, statScale, "Win Rate",
             totalHands > 0 ? $"{(float)(_overview.Wins + _overview.Blackjacks) / totalHands:P1}" : "N/A", Color.LightGreen);
         DrawStatLine(sb, col1, gridTop + lineHeight, statScale, "Loss Rate",
             totalHands > 0 ? $"{(float)_overview.Losses / totalHands:P1}" : "N/A", Color.Salmon);
         DrawStatLine(sb, col1, gridTop + lineHeight * 2, statScale, "Push Rate",
-            totalHands > 0 ? $"{(float)_overview.Pushes / totalHands:P1}" : "N/A", Color.LightGray);
+            totalHands > 0 ? $"{(float)_overview.Pushes / totalHands:P1}" : "N/A", SecondaryText);
 
-        // Column 2: BJ, Bust
         float col2 = leftX + colWidth;
         DrawStatLine(sb, col2, gridTop, statScale, "Blackjack",
             totalHands > 0 ? $"{(float)_overview.Blackjacks / totalHands:P1}" : "N/A", Color.Gold);
@@ -311,7 +349,6 @@ internal sealed class StatsState : State
         DrawStatLine(sb, col2, gridTop + lineHeight * 2, statScale, "Avg Bet",
             $"${_overview.AverageBet:F0}", Color.White);
 
-        // Column 3: Streak, Best, Worst
         float col3 = leftX + colWidth * 2;
         string streakStr = _overview.CurrentStreak > 0
             ? $"W{_overview.CurrentStreak}"
@@ -319,18 +356,27 @@ internal sealed class StatsState : State
                 ? $"L{Math.Abs(_overview.CurrentStreak)}"
                 : "-";
         Color streakColor = _overview.CurrentStreak > 0 ? Color.LightGreen
-            : _overview.CurrentStreak < 0 ? Color.Salmon : Color.Gray;
+            : _overview.CurrentStreak < 0 ? Color.Salmon : SecondaryText;
         DrawStatLine(sb, col3, gridTop, statScale, "Streak", streakStr, streakColor);
         DrawStatLine(sb, col3, gridTop + lineHeight, statScale, "Best Round",
-            $"+${_overview.BiggestWin:F0}", Color.LightGreen);
+            FormatSignedCurrency(_overview.BiggestWin), Color.LightGreen);
         DrawStatLine(sb, col3, gridTop + lineHeight * 2, statScale, "Worst Round",
-            $"${_overview.WorstLoss:F0}", Color.Salmon);
+            FormatSignedCurrency(_overview.WorstLoss), Color.Salmon);
+
+        int dividerTop = (int)(gridTop - 4f);
+        int dividerHeight = (int)(lineHeight * 3f + 8f);
+        sb.Draw(_pixelTexture,
+            new Rectangle((int)(leftX + colWidth - 4f), dividerTop, 1, dividerHeight),
+            DividerColor);
+        sb.Draw(_pixelTexture,
+            new Rectangle((int)(leftX + colWidth * 2f - 4f), dividerTop, 1, dividerHeight),
+            DividerColor);
     }
 
     private void DrawStatLine(SpriteBatch sb, float x, float y, float scale, string label, string value, Color valueColor)
     {
         sb.DrawString(_font, label, new Vector2(x, y),
-            Color.Gray, 0f, Vector2.Zero, scale * 0.85f, SpriteEffects.None, 0f);
+            SecondaryText, 0f, Vector2.Zero, scale * 0.85f, SpriteEffects.None, 0f);
         float labelWidth = _font.MeasureString(label).X * scale * 0.85f;
         sb.DrawString(_font, $"  {value}", new Vector2(x + labelWidth, y),
             valueColor, 0f, Vector2.Zero, scale, SpriteEffects.None, 0f);
@@ -341,17 +387,16 @@ internal sealed class StatsState : State
         if (_bankrollHistory.Count < 2)
         {
             var emptyScale = GetResponsiveScale(0.5f);
+            sb.Draw(_pixelTexture, new Rectangle((int)x, (int)y, (int)width, (int)height), ChartSurface);
             sb.DrawString(_font, "Need 2+ rounds for chart",
                 new Vector2(x + width * 0.3f, y + height * 0.4f),
-                Color.Gray, 0f, Vector2.Zero, emptyScale, SpriteEffects.None, 0f);
+                SecondaryText, 0f, Vector2.Zero, emptyScale, SpriteEffects.None, 0f);
             return;
         }
 
-        // Chart background
         sb.Draw(_pixelTexture, new Rectangle((int)x, (int)y, (int)width, (int)height),
-            new Color(20, 20, 20, 180));
+            ChartSurface);
 
-        // Find min/max for scaling
         decimal minVal = 0, maxVal = 0;
         foreach (var pt in _bankrollHistory)
         {
@@ -362,17 +407,15 @@ internal sealed class StatsState : State
         decimal range = maxVal - minVal;
         if (range == 0) range = 1;
 
-        float padding = 4f;
+        float padding = Math.Clamp(width * 0.015f, 6f, 14f);
         float chartInnerWidth = width - padding * 2;
         float chartInnerHeight = height - padding * 2;
 
-        // Zero line
         float zeroY = y + padding + chartInnerHeight * (float)(1.0 - (double)(0 - minVal) / (double)range);
         sb.Draw(_pixelTexture,
-            new Rectangle((int)x, (int)zeroY, (int)width, 1),
-            new Color(80, 80, 80));
+            new Rectangle((int)x, (int)zeroY, (int)width, 2),
+            DividerColor);
 
-        // Draw line chart
         float prevPx = 0, prevPy = 0;
         for (int i = 0; i < _bankrollHistory.Count; i++)
         {
@@ -383,24 +426,29 @@ internal sealed class StatsState : State
             if (i > 0)
             {
                 DrawLine(sb, prevPx, prevPy, px, py,
-                    _bankrollHistory[i].CumulativeProfit >= 0 ? Color.LightGreen : Color.Salmon);
+                    _bankrollHistory[i].CumulativeProfit >= 0 ? Color.LightGreen : Color.Salmon,
+                    thickness: 3f);
             }
 
             prevPx = px;
             prevPy = py;
         }
 
-        // Axis labels
-        float labelScale = GetResponsiveScale(0.4f);
-        sb.DrawString(_font, $"${maxVal:F0}",
+        sb.Draw(_pixelTexture, new Rectangle((int)(prevPx - 2f), (int)(prevPy - 2f), 4, 4), Color.White);
+
+        float labelScale = GetResponsiveScale(0.42f);
+        sb.DrawString(_font, FormatSignedCurrency(maxVal),
             new Vector2(x + 2, y + 2),
-            Color.Gray, 0f, Vector2.Zero, labelScale, SpriteEffects.None, 0f);
-        sb.DrawString(_font, $"${minVal:F0}",
+            SecondaryText, 0f, Vector2.Zero, labelScale, SpriteEffects.None, 0f);
+        sb.DrawString(_font, FormatSignedCurrency(minVal),
             new Vector2(x + 2, y + height - _font.MeasureString("A").Y * labelScale - 2),
-            Color.Gray, 0f, Vector2.Zero, labelScale, SpriteEffects.None, 0f);
+            SecondaryText, 0f, Vector2.Zero, labelScale, SpriteEffects.None, 0f);
+        sb.DrawString(_font, $"Now {FormatSignedCurrency(_bankrollHistory[^1].CumulativeProfit)}",
+            new Vector2(x + width - _font.MeasureString("Now +$9999").X * labelScale - 6f, y + 2f),
+            PrimaryText, 0f, Vector2.Zero, labelScale, SpriteEffects.None, 0f);
     }
 
-    private void DrawLine(SpriteBatch sb, float x1, float y1, float x2, float y2, Color color)
+    private void DrawLine(SpriteBatch sb, float x1, float y1, float x2, float y2, Color color, float thickness = 2f)
     {
         float dx = x2 - x1;
         float dy = y2 - y1;
@@ -413,17 +461,24 @@ internal sealed class StatsState : State
             color,
             angle,
             Vector2.Zero,
-            new Vector2(length, 2f),
+            new Vector2(length, thickness),
             SpriteEffects.None,
             0f);
     }
 
-    private void DrawAnalysis(SpriteBatch sb)
+    private void DrawHorizontalDivider(SpriteBatch sb, float x, float y, float width)
+    {
+        sb.Draw(_pixelTexture, new Rectangle((int)x, (int)y, (int)width, 1), DividerColor);
+    }
+
+    private void DrawAnalysis(GameTime gameTime, SpriteBatch sb)
     {
         var vp = _graphicsDevice.Viewport;
         float contentTop = vp.Height * 0.13f - _scrollOffset;
         float leftX = vp.Width * 0.06f;
-        float sectionScale = GetResponsiveScale(0.7f);
+        float contentWidth = vp.Width * 0.88f;
+        float sectionScale = GetResponsiveScale(0.75f);
+        float sectionTitleHeight = _font.MeasureString("A").Y * sectionScale;
 
         if (_overview.TotalRounds == 0)
         {
@@ -431,48 +486,51 @@ internal sealed class StatsState : State
             var emptySize = _font.MeasureString("No data yet.") * emptyScale;
             sb.DrawString(_font, "No data yet.",
                 new Vector2(vp.Width / 2f - emptySize.X / 2f, vp.Height * 0.4f),
-                Color.Gray, 0f, Vector2.Zero, emptyScale, SpriteEffects.None, 0f);
+                SecondaryText, 0f, Vector2.Zero, emptyScale, SpriteEffects.None, 0f);
             return;
         }
 
-        // Section 1: Dealer Bust Rate by Upcard
         float sectionY = contentTop;
-        sb.DrawString(_font, "Dealer Bust Rate by Upcard",
-            new Vector2(leftX, sectionY),
-            Color.White, 0f, Vector2.Zero, sectionScale, SpriteEffects.None, 0f);
 
-        sectionY += _font.MeasureString("A").Y * sectionScale + 8f;
-        DrawDealerBustChart(sb, leftX, sectionY, vp.Width * 0.88f, vp.Height * 0.15f);
+        DrawSectionTitle(sb, leftX, sectionY, "Dealer Bust Rate by Upcard", sectionScale);
+        sectionY += sectionTitleHeight + 10f;
+        float dealerBustHeight = Math.Clamp(vp.Height * 0.17f, 96f, 190f);
+        DrawDealerBustChart(sb, leftX, sectionY, contentWidth, dealerBustHeight);
 
-        sectionY += vp.Height * 0.15f + 24f;
+        sectionY += dealerBustHeight + 18f;
+        DrawHorizontalDivider(sb, leftX, sectionY, contentWidth);
+        sectionY += 14f;
 
-        // Section 2: Outcomes by Hand Value
-        sb.DrawString(_font, "Your Outcomes by Hand Value",
-            new Vector2(leftX, sectionY),
-            Color.White, 0f, Vector2.Zero, sectionScale, SpriteEffects.None, 0f);
+        DrawSectionTitle(sb, leftX, sectionY, "Your Outcomes by Hand Value", sectionScale);
+        sectionY += sectionTitleHeight + 10f;
+        float handValueHeight = Math.Clamp(vp.Height * 0.15f, 88f, 170f);
+        DrawHandValueChart(sb, leftX, sectionY, contentWidth, handValueHeight);
 
-        sectionY += _font.MeasureString("A").Y * sectionScale + 8f;
-        DrawHandValueChart(sb, leftX, sectionY, vp.Width * 0.88f, vp.Height * 0.13f);
+        sectionY += handValueHeight + 18f;
+        DrawHorizontalDivider(sb, leftX, sectionY, contentWidth);
+        sectionY += 14f;
 
-        sectionY += vp.Height * 0.13f + 24f;
+        DrawSectionTitle(sb, leftX, sectionY, "Strategy Matrix", sectionScale);
 
-        // Section 3: Strategy Matrix
-        sb.DrawString(_font, "Strategy Matrix",
-            new Vector2(leftX, sectionY),
-            Color.White, 0f, Vector2.Zero, sectionScale, SpriteEffects.None, 0f);
-
-        // Reposition matrix mode buttons based on scroll
         float modeButtonY = sectionY + 2f;
         float modeStartX = leftX + _font.MeasureString("Strategy Matrix").X * sectionScale + 20f;
+        float modeButtonGap = _matrixHardButton.Size.X * 0.15f;
+        float modeButtonsWidth = _matrixHardButton.Size.X * 3f + modeButtonGap * 2f;
+        float contentRight = leftX + contentWidth;
+        if (modeStartX + modeButtonsWidth > contentRight)
+        {
+            modeStartX = leftX;
+            modeButtonY += sectionTitleHeight + 6f;
+        }
+
         _matrixHardButton.Position = new Vector2(modeStartX, modeButtonY);
-        _matrixSoftButton.Position = new Vector2(modeStartX + _matrixHardButton.Size.X * 1.15f, modeButtonY);
-        _matrixPairsButton.Position = new Vector2(modeStartX + _matrixHardButton.Size.X * 2.3f, modeButtonY);
+        _matrixSoftButton.Position = new Vector2(modeStartX + _matrixHardButton.Size.X + modeButtonGap, modeButtonY);
+        _matrixPairsButton.Position = new Vector2(modeStartX + (_matrixHardButton.Size.X + modeButtonGap) * 2f, modeButtonY);
 
-        _matrixHardButton.Draw(new GameTime(), sb);
-        _matrixSoftButton.Draw(new GameTime(), sb);
-        _matrixPairsButton.Draw(new GameTime(), sb);
+        _matrixHardButton.Draw(gameTime, sb);
+        _matrixSoftButton.Draw(gameTime, sb);
+        _matrixPairsButton.Draw(gameTime, sb);
 
-        // Underline active mode
         var activeMode = _matrixMode switch
         {
             MatrixMode.Hard => _matrixHardButton,
@@ -485,25 +543,27 @@ internal sealed class StatsState : State
             new Rectangle(modeRect.X, modeRect.Bottom + 1, modeRect.Width, 2),
             Color.Gold);
 
-        sectionY += _font.MeasureString("A").Y * sectionScale + _matrixHardButton.Size.Y * 0.5f + 12f;
-        float matrixHeight = DrawStrategyMatrix(sb, leftX, sectionY, vp.Width * 0.88f);
+        float matrixStartY = Math.Max(sectionY + sectionTitleHeight + 10f, modeButtonY + _matrixHardButton.Size.Y + 10f);
+        float matrixHeight = DrawStrategyMatrix(sb, leftX, matrixStartY, contentWidth);
 
-        sectionY += matrixHeight + 24f;
+        sectionY = matrixStartY + matrixHeight + 18f;
+        DrawHorizontalDivider(sb, leftX, sectionY, contentWidth);
+        sectionY += 14f;
 
-        // Section 4: Card Distribution
-        sb.DrawString(_font, "Card Distribution",
-            new Vector2(leftX, sectionY),
-            Color.White, 0f, Vector2.Zero, sectionScale, SpriteEffects.None, 0f);
+        DrawSectionTitle(sb, leftX, sectionY, "Card Distribution", sectionScale);
+        sectionY += sectionTitleHeight + 10f;
+        float cardDistributionHeight = Math.Clamp(vp.Height * 0.14f, 84f, 170f);
+        DrawCardDistribution(sb, leftX, sectionY, contentWidth, cardDistributionHeight);
+        sectionY += cardDistributionHeight + 36f;
 
-        sectionY += _font.MeasureString("A").Y * sectionScale + 8f;
-        DrawCardDistribution(sb, leftX, sectionY, vp.Width * 0.88f, vp.Height * 0.12f);
-
-        sectionY += vp.Height * 0.12f + 40f;
-
-        // Update max scroll
         float totalContentHeight = sectionY - (vp.Height * 0.13f - _scrollOffset);
-        float visibleHeight = vp.Height * 0.8f;
+        float visibleHeight = vp.Height * 0.78f;
         _maxScroll = Math.Max(0, totalContentHeight - visibleHeight);
+    }
+
+    private void DrawSectionTitle(SpriteBatch sb, float x, float y, string title, float scale)
+    {
+        sb.DrawString(_font, title, new Vector2(x, y), PrimaryText, 0f, Vector2.Zero, scale, SpriteEffects.None, 0f);
     }
 
     private void DrawDealerBustChart(SpriteBatch sb, float x, float y, float width, float height)
@@ -511,52 +571,61 @@ internal sealed class StatsState : State
         if (_dealerBusts.Count == 0)
         {
             var emptyScale = GetResponsiveScale(0.5f);
+            sb.Draw(_pixelTexture, new Rectangle((int)x, (int)y, (int)width, (int)height), ChartSurface);
             sb.DrawString(_font, "No data",
                 new Vector2(x + width * 0.4f, y + height * 0.3f),
-                Color.Gray, 0f, Vector2.Zero, emptyScale, SpriteEffects.None, 0f);
+                SecondaryText, 0f, Vector2.Zero, emptyScale, SpriteEffects.None, 0f);
             return;
         }
 
-        // Background
         sb.Draw(_pixelTexture, new Rectangle((int)x, (int)y, (int)width, (int)height),
-            new Color(20, 20, 20, 180));
+            ChartSurface);
 
-        float barWidth = width / (UpcardOrder.Length + 1);
+        var totalsByUpcard = new Dictionary<string, (int Total, int Bust)>(StringComparer.OrdinalIgnoreCase);
+        foreach (var stat in _dealerBusts)
+        {
+            string upcard = stat.Upcard;
+            if (Array.IndexOf(UpcardOrder, upcard) < 0)
+                continue;
+
+            if (!totalsByUpcard.TryGetValue(upcard, out var running))
+                running = (0, 0);
+            totalsByUpcard[upcard] = (running.Total + stat.TotalHands, running.Bust + stat.BustedHands);
+        }
+
+        float barWidth = width / UpcardOrder.Length;
         float labelScale = GetResponsiveScale(0.4f);
         float barPadding = barWidth * 0.2f;
 
         for (int i = 0; i < UpcardOrder.Length; i++)
         {
             string upcard = UpcardOrder[i];
-            var stat = _dealerBusts.FirstOrDefault(s => s.Upcard == upcard);
+            totalsByUpcard.TryGetValue(upcard, out var stat);
 
-            float barX = x + barWidth * (i + 0.5f);
+            float barX = x + barWidth * i + barPadding;
             float barActualWidth = barWidth - barPadding * 2;
 
-            // Label
             var labelSize = _font.MeasureString(upcard) * labelScale;
             sb.DrawString(_font, upcard,
                 new Vector2(barX + barActualWidth / 2f - labelSize.X / 2f, y + height - labelSize.Y - 2f),
-                Color.Gray, 0f, Vector2.Zero, labelScale, SpriteEffects.None, 0f);
+                SecondaryText, 0f, Vector2.Zero, labelScale, SpriteEffects.None, 0f);
 
-            if (stat == null || stat.TotalHands == 0) continue;
+            if (stat.Total == 0) continue;
 
-            float bustRate = (float)stat.BustedHands / stat.TotalHands;
+            float bustRate = (float)stat.Bust / stat.Total;
             float maxBarHeight = height - labelSize.Y - 20f;
             float barHeight = maxBarHeight * bustRate;
 
-            // Bar
-            Color barColor = bustRate > 0.35f ? Color.LightGreen : bustRate > 0.2f ? Color.Gold : Color.Salmon;
+            Color barColor = ResolveDealerBustBarColor(bustRate);
             sb.Draw(_pixelTexture,
                 new Rectangle((int)barX, (int)(y + height - labelSize.Y - 6f - barHeight), (int)barActualWidth, (int)barHeight),
-                barColor * 0.8f);
+                barColor * 0.85f);
 
-            // Percentage label
             string pctStr = $"{bustRate:P0}";
             var pctSize = _font.MeasureString(pctStr) * (labelScale * 0.9f);
             sb.DrawString(_font, pctStr,
                 new Vector2(barX + barActualWidth / 2f - pctSize.X / 2f, y + height - labelSize.Y - 8f - barHeight - pctSize.Y),
-                Color.White, 0f, Vector2.Zero, labelScale * 0.9f, SpriteEffects.None, 0f);
+                PrimaryText, 0f, Vector2.Zero, labelScale * 0.9f, SpriteEffects.None, 0f);
         }
     }
 
@@ -565,48 +634,60 @@ internal sealed class StatsState : State
         if (_handValueOutcomes.Count == 0)
         {
             var emptyScale = GetResponsiveScale(0.5f);
+            sb.Draw(_pixelTexture, new Rectangle((int)x, (int)y, (int)width, (int)height), ChartSurface);
             sb.DrawString(_font, "No data",
                 new Vector2(x + width * 0.4f, y + height * 0.3f),
-                Color.Gray, 0f, Vector2.Zero, emptyScale, SpriteEffects.None, 0f);
+                SecondaryText, 0f, Vector2.Zero, emptyScale, SpriteEffects.None, 0f);
             return;
         }
 
         sb.Draw(_pixelTexture, new Rectangle((int)x, (int)y, (int)width, (int)height),
-            new Color(20, 20, 20, 180));
+            ChartSurface);
 
-        // Filter to values 4-21
         var filtered = _handValueOutcomes.Where(h => h.PlayerValue >= 4 && h.PlayerValue <= 21).ToList();
         if (filtered.Count == 0) return;
 
+        var byValue = filtered.ToDictionary(h => h.PlayerValue);
+
         int minVal = 4, maxVal = 21;
         int valRange = maxVal - minVal + 1;
-        float cellWidth = width / (valRange + 1);
+        float cellWidth = width / valRange;
         float labelScale = GetResponsiveScale(0.35f);
+        float pctScale = labelScale * 0.8f;
 
         for (int v = minVal; v <= maxVal; v++)
         {
-            var stat = filtered.FirstOrDefault(h => h.PlayerValue == v);
-            float cellX = x + cellWidth * (v - minVal + 0.5f);
+            byValue.TryGetValue(v, out var stat);
+            float cellX = x + cellWidth * (v - minVal);
 
-            // Value label
             string valStr = v.ToString(CultureInfo.InvariantCulture);
             var labelSize = _font.MeasureString(valStr) * labelScale;
             sb.DrawString(_font, valStr,
-                new Vector2(cellX + cellWidth * 0.3f - labelSize.X / 2f, y + height - labelSize.Y - 2f),
-                Color.Gray, 0f, Vector2.Zero, labelScale, SpriteEffects.None, 0f);
+                new Vector2(cellX + cellWidth * 0.5f - labelSize.X / 2f, y + height - labelSize.Y - 2f),
+                SecondaryText, 0f, Vector2.Zero, labelScale, SpriteEffects.None, 0f);
 
             if (stat == null || stat.Total == 0) continue;
 
             float winRate = (float)stat.Wins / stat.Total;
-            float barMaxH = height - labelSize.Y - 8f;
+            float barMaxH = height - labelSize.Y - 12f;
             float barH = barMaxH * Math.Min(winRate, 1f);
+            float barW = Math.Max(cellWidth * 0.62f, 4f);
+            float barX = cellX + (cellWidth - barW) * 0.5f;
 
-            Color barColor = winRate > 0.5f ? Color.LightGreen : winRate > 0.35f ? Color.Gold : Color.Salmon;
-            float barW = cellWidth * 0.7f;
+            Color barColor = ResolveOutcomeRateColor(winRate);
 
             sb.Draw(_pixelTexture,
-                new Rectangle((int)cellX, (int)(y + height - labelSize.Y - 4f - barH), (int)barW, (int)barH),
-                barColor * 0.7f);
+                new Rectangle((int)barX, (int)(y + height - labelSize.Y - 4f - barH), (int)barW, (int)barH),
+                barColor * 0.75f);
+
+            if (cellWidth > 30f)
+            {
+                string pctStr = $"{winRate:P0}";
+                var pctSize = _font.MeasureString(pctStr) * pctScale;
+                sb.DrawString(_font, pctStr,
+                    new Vector2(barX + barW * 0.5f - pctSize.X / 2f, y + height - labelSize.Y - 6f - barH - pctSize.Y),
+                    PrimaryText, 0f, Vector2.Zero, pctScale, SpriteEffects.None, 0f);
+            }
         }
     }
 
@@ -617,20 +698,37 @@ internal sealed class StatsState : State
             var emptyScale = GetResponsiveScale(0.5f);
             sb.DrawString(_font, "No data for this hand type",
                 new Vector2(x, y),
-                Color.Gray, 0f, Vector2.Zero, emptyScale, SpriteEffects.None, 0f);
+                SecondaryText, 0f, Vector2.Zero, emptyScale, SpriteEffects.None, 0f);
             return _font.MeasureString("A").Y * emptyScale + 8f;
         }
 
-        // Build lookup: playerValue -> dealerUpcard -> cell
         var lookup = new Dictionary<int, Dictionary<string, StrategyCell>>();
         foreach (var cell in _strategyMatrix)
         {
+            string upcard = cell.DealerUpcard;
+            if (Array.IndexOf(UpcardOrder, upcard) < 0)
+                continue;
+
             if (!lookup.TryGetValue(cell.PlayerValue, out var byUpcard))
             {
                 byUpcard = new Dictionary<string, StrategyCell>(StringComparer.OrdinalIgnoreCase);
                 lookup[cell.PlayerValue] = byUpcard;
             }
-            byUpcard[cell.DealerUpcard] = cell;
+
+            if (!byUpcard.TryGetValue(upcard, out var existing))
+            {
+                byUpcard[upcard] = cell with { DealerUpcard = upcard };
+                continue;
+            }
+
+            byUpcard[upcard] = existing with
+            {
+                Wins = existing.Wins + cell.Wins,
+                Losses = existing.Losses + cell.Losses,
+                Pushes = existing.Pushes + cell.Pushes,
+                Total = existing.Total + cell.Total,
+                NetPayout = existing.NetPayout + cell.NetPayout
+            };
         }
 
         var playerValues = lookup.Keys.Where(v => v >= 4 && v <= 21).OrderByDescending(v => v).ToList();
@@ -639,79 +737,111 @@ internal sealed class StatsState : State
             var emptyScale = GetResponsiveScale(0.5f);
             sb.DrawString(_font, "No data for this hand type",
                 new Vector2(x, y),
-                Color.Gray, 0f, Vector2.Zero, emptyScale, SpriteEffects.None, 0f);
+                SecondaryText, 0f, Vector2.Zero, emptyScale, SpriteEffects.None, 0f);
             return _font.MeasureString("A").Y * emptyScale + 8f;
         }
 
-        int cols = UpcardOrder.Length + 1; // +1 for row header
-        int rows = playerValues.Count + 1; // +1 for header row
+        int cols = UpcardOrder.Length + 1;
+        int rows = playerValues.Count + 1;
 
-        float cellW = Math.Min(width / cols, 70f);
-        float cellH = Math.Clamp(_graphicsDevice.Viewport.Height * 0.028f, 18f, 30f);
-        float labelScale = GetResponsiveScale(0.35f);
+        float cellW = ResolveMatrixCellWidth(width, cols);
+        float cellH = ResolveMatrixCellHeight(_graphicsDevice.Viewport.Height);
+        float tableWidth = cellW * cols;
+        float tableStartX = x + Math.Max(0f, (width - tableWidth) / 2f);
 
-        // Header row
+        float legendScale = GetResponsiveScale(0.34f);
+        string legendText = "Green profitable   Red losing   Gray low sample";
+        sb.DrawString(_font, legendText, new Vector2(x, y), SecondaryText, 0f, Vector2.Zero, legendScale, SpriteEffects.None, 0f);
+
+        float legendHeight = _font.MeasureString("A").Y * legendScale + 8f;
+        float gridY = y + legendHeight;
+        float labelScale = GetResponsiveScale(0.38f);
+
+        sb.Draw(_pixelTexture,
+            new Rectangle((int)tableStartX, (int)gridY, (int)tableWidth, (int)(cellH * rows)),
+            ChartSurface);
+
+        sb.Draw(_pixelTexture,
+            new Rectangle((int)tableStartX, (int)gridY, (int)tableWidth, (int)cellH),
+            new Color(24, 36, 49, 255));
+
+        string headerAxis = "P/D";
+        var axisSize = _font.MeasureString(headerAxis) * (labelScale * 0.8f);
+        sb.DrawString(_font, headerAxis,
+            new Vector2(tableStartX + cellW / 2f - axisSize.X / 2f, gridY + cellH / 2f - axisSize.Y / 2f),
+            SecondaryText, 0f, Vector2.Zero, labelScale * 0.8f, SpriteEffects.None, 0f);
+
         for (int c = 0; c < UpcardOrder.Length; c++)
         {
-            float cx = x + cellW * (c + 1);
+            float cx = tableStartX + cellW * (c + 1);
             var headerSize = _font.MeasureString(UpcardOrder[c]) * labelScale;
             sb.DrawString(_font, UpcardOrder[c],
-                new Vector2(cx + cellW / 2f - headerSize.X / 2f, y + cellH / 2f - headerSize.Y / 2f),
-                Color.LightGray, 0f, Vector2.Zero, labelScale, SpriteEffects.None, 0f);
+                new Vector2(cx + cellW / 2f - headerSize.X / 2f, gridY + cellH / 2f - headerSize.Y / 2f),
+                SecondaryText, 0f, Vector2.Zero, labelScale, SpriteEffects.None, 0f);
         }
 
-        // Data rows
         for (int r = 0; r < playerValues.Count; r++)
         {
             int pv = playerValues[r];
-            float ry = y + cellH * (r + 1);
+            float ry = gridY + cellH * (r + 1);
 
-            // Row header
+            sb.Draw(_pixelTexture,
+                new Rectangle((int)tableStartX, (int)ry, (int)cellW, (int)cellH),
+                new Color(24, 36, 49, 255));
+
             string rowLabel = pv.ToString(CultureInfo.InvariantCulture);
             var rlSize = _font.MeasureString(rowLabel) * labelScale;
             sb.DrawString(_font, rowLabel,
-                new Vector2(x + cellW / 2f - rlSize.X / 2f, ry + cellH / 2f - rlSize.Y / 2f),
-                Color.LightGray, 0f, Vector2.Zero, labelScale, SpriteEffects.None, 0f);
+                new Vector2(tableStartX + cellW / 2f - rlSize.X / 2f, ry + cellH / 2f - rlSize.Y / 2f),
+                SecondaryText, 0f, Vector2.Zero, labelScale, SpriteEffects.None, 0f);
 
             var byUpcard = lookup[pv];
 
             for (int c = 0; c < UpcardOrder.Length; c++)
             {
-                float cx = x + cellW * (c + 1);
+                float cx = tableStartX + cellW * (c + 1);
 
                 if (!byUpcard.TryGetValue(UpcardOrder[c], out var cell) || cell.Total == 0)
                 {
-                    // Empty cell — light border
                     sb.Draw(_pixelTexture,
                         new Rectangle((int)cx, (int)ry, (int)cellW, (int)cellH),
-                        new Color(30, 30, 30, 100));
+                        new Color(31, 42, 54, 185));
                     continue;
                 }
 
-                // Net profit rate: (wins - losses) / total
                 float profitRate = (float)(cell.Wins - cell.Losses) / cell.Total;
-
-                // Color: green for positive, red for negative
-                Color cellColor;
-                if (profitRate > 0.2f) cellColor = new Color(30, 120, 30);
-                else if (profitRate > 0) cellColor = new Color(30, 80, 30);
-                else if (profitRate > -0.2f) cellColor = new Color(100, 30, 30);
-                else cellColor = new Color(140, 30, 30);
+                Color cellColor = ResolveMatrixCellColor(profitRate, cell.Total);
 
                 sb.Draw(_pixelTexture,
                     new Rectangle((int)cx + 1, (int)ry + 1, (int)cellW - 2, (int)cellH - 2),
-                    cellColor * 0.9f);
+                    cellColor);
 
-                // Value text
                 string cellStr = $"{profitRate:+0%;-0%}";
-                var csSize = _font.MeasureString(cellStr) * (labelScale * 0.85f);
+                float valueScale = labelScale * 0.82f;
+                var csSize = _font.MeasureString(cellStr) * valueScale;
                 sb.DrawString(_font, cellStr,
                     new Vector2(cx + cellW / 2f - csSize.X / 2f, ry + cellH / 2f - csSize.Y / 2f),
-                    Color.White, 0f, Vector2.Zero, labelScale * 0.85f, SpriteEffects.None, 0f);
+                    ResolveMatrixTextColor(cellColor), 0f, Vector2.Zero, valueScale, SpriteEffects.None, 0f);
             }
         }
 
-        return cellH * rows + 4f;
+        for (int c = 0; c <= cols; c++)
+        {
+            float cx = tableStartX + c * cellW;
+            sb.Draw(_pixelTexture,
+                new Rectangle((int)cx, (int)gridY, 1, (int)(cellH * rows)),
+                DividerColor);
+        }
+
+        for (int r = 0; r <= rows; r++)
+        {
+            float ry = gridY + r * cellH;
+            sb.Draw(_pixelTexture,
+                new Rectangle((int)tableStartX, (int)ry, (int)tableWidth, 1),
+                DividerColor);
+        }
+
+        return legendHeight + cellH * rows + 8f;
     }
 
     private void DrawCardDistribution(SpriteBatch sb, float x, float y, float width, float height)
@@ -719,66 +849,140 @@ internal sealed class StatsState : State
         if (_cardDistribution.Count == 0)
         {
             var emptyScale = GetResponsiveScale(0.5f);
+            sb.Draw(_pixelTexture, new Rectangle((int)x, (int)y, (int)width, (int)height), ChartSurface);
             sb.DrawString(_font, "No data",
                 new Vector2(x + width * 0.4f, y + height * 0.3f),
-                Color.Gray, 0f, Vector2.Zero, emptyScale, SpriteEffects.None, 0f);
+                SecondaryText, 0f, Vector2.Zero, emptyScale, SpriteEffects.None, 0f);
             return;
         }
 
         sb.Draw(_pixelTexture, new Rectangle((int)x, (int)y, (int)width, (int)height),
-            new Color(20, 20, 20, 180));
+            ChartSurface);
 
-        float cellWidth = width / (_cardDistribution.Count + 1);
-        float labelScale = GetResponsiveScale(0.35f);
+        float cellWidth = width / _cardDistribution.Count;
+        float labelScale = GetResponsiveScale(0.36f);
 
         for (int i = 0; i < _cardDistribution.Count; i++)
         {
             var card = _cardDistribution[i];
-            float cellX = x + cellWidth * (i + 0.5f);
+            float cellX = x + cellWidth * i;
 
-            // Rank label
             var labelSize = _font.MeasureString(card.Rank) * labelScale;
             sb.DrawString(_font, card.Rank,
-                new Vector2(cellX + cellWidth * 0.3f - labelSize.X / 2f, y + height - labelSize.Y - 2f),
-                Color.Gray, 0f, Vector2.Zero, labelScale, SpriteEffects.None, 0f);
+                new Vector2(cellX + cellWidth * 0.5f - labelSize.X / 2f, y + height - labelSize.Y - 2f),
+                SecondaryText, 0f, Vector2.Zero, labelScale, SpriteEffects.None, 0f);
 
-            // Bar showing deviation from expected
             float deviation = (float)(card.ActualPercent - card.ExpectedPercent);
             float maxBarH = (height - labelSize.Y - 24f) / 2f;
             float barH = Math.Min(Math.Abs(deviation) / 3f, 1f) * maxBarH;
             float midY = y + (height - labelSize.Y - 4f) / 2f;
 
-            Color barColor = deviation >= 0 ? Color.CornflowerBlue : Color.Salmon;
-            float barW = cellWidth * 0.6f;
+            Color barColor = deviation >= 0 ? new Color(81, 160, 232) : new Color(229, 119, 96);
+            float barW = Math.Max(cellWidth * 0.62f, 4f);
+            float barX = cellX + (cellWidth - barW) * 0.5f;
 
             if (deviation >= 0)
             {
                 sb.Draw(_pixelTexture,
-                    new Rectangle((int)cellX, (int)(midY - barH), (int)barW, (int)barH),
-                    barColor * 0.7f);
+                    new Rectangle((int)barX, (int)(midY - barH), (int)barW, (int)barH),
+                    barColor * 0.78f);
             }
             else
             {
                 sb.Draw(_pixelTexture,
-                    new Rectangle((int)cellX, (int)midY, (int)barW, (int)barH),
-                    barColor * 0.7f);
+                    new Rectangle((int)barX, (int)midY, (int)barW, (int)barH),
+                    barColor * 0.78f);
             }
 
-            // Percentage label
             string pctStr = $"{card.ActualPercent:F1}%";
             var pctSize = _font.MeasureString(pctStr) * (labelScale * 0.85f);
             float pctY = deviation >= 0
                 ? midY - barH - pctSize.Y - 2f
                 : midY + barH + 2f;
             sb.DrawString(_font, pctStr,
-                new Vector2(cellX + barW / 2f - pctSize.X / 2f, pctY),
-                Color.White, 0f, Vector2.Zero, labelScale * 0.85f, SpriteEffects.None, 0f);
+                new Vector2(barX + barW / 2f - pctSize.X / 2f, pctY),
+                PrimaryText, 0f, Vector2.Zero, labelScale * 0.85f, SpriteEffects.None, 0f);
         }
 
-        // Draw expected line
         float expectedY = y + (height - _font.MeasureString("A").Y * labelScale - 4f) / 2f;
         sb.Draw(_pixelTexture,
-            new Rectangle((int)x, (int)expectedY, (int)width, 1),
-            Color.Gray * 0.5f);
+            new Rectangle((int)x, (int)expectedY, (int)width, 2),
+            DividerColor);
+    }
+
+    internal static (decimal Latest, decimal Peak, decimal Trough) ComputeBankrollSummary(IReadOnlyList<BankrollPoint> history)
+    {
+        if (history.Count == 0)
+            return (0m, 0m, 0m);
+
+        decimal latest = history[^1].CumulativeProfit;
+        decimal peak = history.Max(x => x.CumulativeProfit);
+        decimal trough = history.Min(x => x.CumulativeProfit);
+        return (latest, peak, trough);
+    }
+
+    internal static string FormatSignedCurrency(decimal amount)
+    {
+        if (amount > 0)
+            return $"+${amount:F0}";
+        if (amount < 0)
+            return $"-${Math.Abs(amount):F0}";
+        return "$0";
+    }
+
+    internal static float ResolveMatrixCellWidth(float availableWidth, int columnCount)
+    {
+        if (columnCount <= 0)
+            return 52f;
+
+        return Math.Clamp(availableWidth / columnCount, 52f, 100f);
+    }
+
+    internal static float ResolveMatrixCellHeight(int viewportHeight)
+    {
+        return Math.Clamp(viewportHeight * 0.042f, 24f, 46f);
+    }
+
+    internal static Color ResolveMatrixCellColor(float profitRate, int sampleSize)
+    {
+        if (sampleSize < 5)
+            return MatrixLowSampleColor;
+
+        float clampedRate = Math.Clamp(profitRate, -1f, 1f);
+        Color baseColor = clampedRate switch
+        {
+            >= 0.4f => new Color(54, 162, 104),
+            >= 0.18f => new Color(65, 132, 92),
+            > -0.18f => new Color(104, 118, 136),
+            > -0.4f => new Color(154, 93, 93),
+            _ => new Color(192, 74, 74)
+        };
+
+        byte alpha = (byte)Math.Clamp(130 + sampleSize * 8, 130, 255);
+        return new Color(baseColor.R, baseColor.G, baseColor.B, alpha);
+    }
+
+    internal static Color ResolveMatrixTextColor(Color background)
+    {
+        float luminance = 0.2126f * background.R + 0.7152f * background.G + 0.0722f * background.B;
+        return luminance >= 145f ? Color.Black : Color.White;
+    }
+
+    private static Color ResolveDealerBustBarColor(float bustRate)
+    {
+        if (bustRate >= 0.4f)
+            return new Color(76, 179, 120);
+        if (bustRate >= 0.25f)
+            return new Color(215, 178, 89);
+        return new Color(223, 108, 94);
+    }
+
+    private static Color ResolveOutcomeRateColor(float winRate)
+    {
+        if (winRate >= 0.55f)
+            return new Color(76, 179, 120);
+        if (winRate >= 0.4f)
+            return new Color(215, 178, 89);
+        return new Color(223, 108, 94);
     }
 }

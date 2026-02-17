@@ -234,33 +234,6 @@ dotnet test tests/MonoBlackjack.App.Tests  # All smoke tests pass
 
 ---
 
-## Implementation Order Summary
-
-**Week 1: Foundation**
-- Day 1-2: Phase 1.1 (GameConfig → GameRules refactor)
-- Day 3: Phase 1.2 (Coordinate system standardization)
-- Day 4: Phase 1.3 (Input validation)
-
-**Week 2: Visual Quality**
-- Day 1-2: Phase 2.1 (Font scaling)
-- Day 2-3: Phase 2.2 (Button layout)
-- Day 3-4: Phase 2.3 (Card alignment)
-
-**Week 3: UX Flow**
-- Day 1-2: Phase 3.1 (Pause menu)
-- Day 2-3: Phase 3.2 (State history)
-
-**Week 4: Settings & Stats**
-- Day 1-2: Phase 4.1 (Settings sections)
-- Day 2-3: Phase 4.2-4.3 (Game mode, hand values)
-- Day 4: Phase 5.1 (Stats improvements)
-
-**Week 5: Quality & Polish**
-- Day 1-2: Phase 6 (Testing, cleanup)
-- Day 3-5: Phase 7 (Future features as time permits)
-
----
-
 ## Critical Files Reference
 
 **Core Domain:**

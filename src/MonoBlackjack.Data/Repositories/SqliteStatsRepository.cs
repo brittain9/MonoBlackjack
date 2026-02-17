@@ -436,6 +436,7 @@ public sealed class SqliteStatsRepository : IStatsRepository
             FROM Decision d
             JOIN Round r ON r.Id = d.RoundId
             WHERE r.ProfileId = $profileId
+              AND d.DealerUpcard IN ('A', '2', '3', '4', '5', '6', '7', '8', '9', 'T')
             GROUP BY d.DealerUpcard
             ORDER BY CASE d.DealerUpcard
                 WHEN 'A' THEN 1
@@ -503,11 +504,10 @@ public sealed class SqliteStatsRepository : IStatsRepository
             ? "AND d.IsSoft = 1"
             : handType.Equals("Hard", StringComparison.OrdinalIgnoreCase)
                 ? "AND d.IsSoft = 0"
-                : ""; // "Pairs" — we don't filter by soft, we filter by split action existing
+                : "";
 
         if (handType.Equals("Pairs", StringComparison.OrdinalIgnoreCase))
         {
-            // For pairs: show decisions where the action was Split, grouped by value and upcard
             cmd.CommandText = $"""
                 SELECT
                     d.PlayerValue,
@@ -521,12 +521,19 @@ public sealed class SqliteStatsRepository : IStatsRepository
                 JOIN Round r ON r.Id = d.RoundId
                 WHERE r.ProfileId = $profileId
                   AND d.ResultOutcome IS NOT NULL
+                  AND d.DealerUpcard IN ('A', '2', '3', '4', '5', '6', '7', '8', '9', 'T')
                   AND EXISTS (
                       SELECT 1 FROM Decision d2
                       WHERE d2.RoundId = d.RoundId AND d2.HandIndex = d.HandIndex AND d2.Action = 'Split'
                   )
                 GROUP BY d.PlayerValue, d.DealerUpcard
-                ORDER BY d.PlayerValue, d.DealerUpcard;
+                ORDER BY d.PlayerValue,
+                    CASE d.DealerUpcard
+                        WHEN 'A' THEN 1
+                        WHEN '2' THEN 2 WHEN '3' THEN 3 WHEN '4' THEN 4
+                        WHEN '5' THEN 5 WHEN '6' THEN 6 WHEN '7' THEN 7
+                        WHEN '8' THEN 8 WHEN '9' THEN 9 WHEN 'T' THEN 10
+                    END;
                 """;
         }
         else
@@ -544,9 +551,16 @@ public sealed class SqliteStatsRepository : IStatsRepository
                 JOIN Round r ON r.Id = d.RoundId
                 WHERE r.ProfileId = $profileId
                   AND d.ResultOutcome IS NOT NULL
+                  AND d.DealerUpcard IN ('A', '2', '3', '4', '5', '6', '7', '8', '9', 'T')
                   {softFilter}
                 GROUP BY d.PlayerValue, d.DealerUpcard
-                ORDER BY d.PlayerValue, d.DealerUpcard;
+                ORDER BY d.PlayerValue,
+                    CASE d.DealerUpcard
+                        WHEN 'A' THEN 1
+                        WHEN '2' THEN 2 WHEN '3' THEN 3 WHEN '4' THEN 4
+                        WHEN '5' THEN 5 WHEN '6' THEN 6 WHEN '7' THEN 7
+                        WHEN '8' THEN 8 WHEN '9' THEN 9 WHEN 'T' THEN 10
+                    END;
                 """;
         }
 

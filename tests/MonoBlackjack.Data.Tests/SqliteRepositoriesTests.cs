@@ -141,17 +141,52 @@ public sealed class SqliteRepositoriesTests
         }
     }
 
+    [Fact]
+    public void StatsRepository_IgnoresNonCanonicalDealerUpcards_InDashboardAggregations()
+    {
+        var (database, path) = CreateDatabase();
+        try
+        {
+            var profiles = new SqliteProfileRepository(database);
+            var stats = new SqliteStatsRepository(database);
+            var profile = profiles.GetOrCreateProfile("Default");
+            var rules = new RuleFingerprint("3:2", false, 6, "none");
+
+            stats.RecordRound(profile.Id, CreateRoundRecord(rules, 10m, -10m, "Hit", dealerUpcard: "10", dealerBusted: false));
+            stats.RecordRound(profile.Id, CreateRoundRecord(rules, 10m, 10m, "Stand", dealerUpcard: "K", dealerBusted: true));
+            stats.RecordRound(profile.Id, CreateRoundRecord(rules, 10m, -10m, "Hit", dealerUpcard: "T", dealerBusted: true));
+
+            var dealerBusts = stats.GetDealerBustByUpcard(profile.Id);
+            dealerBusts.Should().ContainSingle(x => x.Upcard == "T");
+
+            var canonicalBust = dealerBusts.Single(x => x.Upcard == "T");
+            canonicalBust.TotalHands.Should().Be(1);
+            canonicalBust.BustedHands.Should().Be(1);
+
+            var hardMatrix = stats.GetStrategyMatrix(profile.Id, "Hard");
+            hardMatrix.Should().ContainSingle();
+            hardMatrix[0].DealerUpcard.Should().Be("T");
+            hardMatrix[0].Total.Should().Be(1);
+        }
+        finally
+        {
+            TryDelete(path);
+        }
+    }
+
     private static RoundRecord CreateRoundRecord(
         RuleFingerprint rules,
         decimal bet,
         decimal payout,
-        string action)
+        string action,
+        string dealerUpcard = "6",
+        bool dealerBusted = false)
     {
         return new RoundRecord(
             PlayedAtUtc: DateTime.UtcNow,
             BetAmount: bet,
             NetPayout: payout,
-            DealerBusted: false,
+            DealerBusted: dealerBusted,
             Rules: rules,
             HandResults:
             [
@@ -170,7 +205,7 @@ public sealed class SqliteRepositoriesTests
                     0,
                     17,
                     false,
-                    "6",
+                    dealerUpcard,
                     action,
                     payout > 0 ? HandOutcome.Win : HandOutcome.Lose,
                     payout)

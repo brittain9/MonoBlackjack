@@ -1,5 +1,11 @@
 # CodeX Instructions: Complete GameConfig → GameRules Refactor
 
+## Current Refactor Policy (2026-02-17)
+- Backward compatibility is not a goal for this codebase.
+- Legacy code paths should be removed instead of preserved.
+- Existing persisted data can be deleted/reset as needed during refactors.
+- Prefer clean forward-only implementations over migration-heavy solutions.
+
 ## Context
 You are completing a refactor that replaces mutable static `GameConfig` with an immutable `GameRules` record. Most of the work is done, but there are **63 remaining compilation errors** in the test file `GameRoundTests.cs` that need to be fixed.
 
