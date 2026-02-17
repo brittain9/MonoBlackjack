@@ -10,6 +10,7 @@ using MonoBlackjack.Events;
 using MonoBlackjack.Layout;
 using MonoBlackjack.Rendering;
 using MonoBlackjack.Stats;
+using MonoBlackjack.DevTools;
 using Microsoft.Xna.Framework.Input;
 
 namespace MonoBlackjack;
@@ -55,6 +56,7 @@ internal class GameState : State
     private readonly Button _pauseCancelQuitButton;
     private readonly StatsRecorder _statsRecorder;
     private readonly List<IDisposable> _subscriptions = [];
+    private readonly DevMenuOverlay _devMenu;
 
     private readonly List<TrackedCardSprite> _trackedCards = [];
     private readonly HashSet<int> _bustedHands = new();
@@ -208,6 +210,13 @@ internal class GameState : State
         _subscriptions.Add(_eventBus.Subscribe<HandResolved>(OnHandResolved));
         _subscriptions.Add(_eventBus.Subscribe<RoundComplete>(OnRoundComplete));
 
+        _devMenu = new DevMenuOverlay(
+            buttonTexture,
+            [
+                new CardSelectorTool(_shoe, buttonTexture, _font),
+                new SplitSetupTool(_shoe, buttonTexture, _font)
+            ]);
+
         CalculatePositions();
 
         if (_rules.BetFlow == BetFlowMode.FreePlay)
@@ -309,6 +318,8 @@ internal class GameState : State
         float confirmStartX = centerX - (confirmTotalWidth / 2f) + (_actionButtonSize.X / 2f);
         _pauseConfirmQuitButton.Position = new Vector2(confirmStartX, confirmY);
         _pauseCancelQuitButton.Position = new Vector2(confirmStartX + _actionButtonSize.X + _actionButtonPadding, confirmY);
+
+        _devMenu.HandleResize(vp.Bounds);
     }
 
     private void LayoutActionButtons()
@@ -337,17 +348,22 @@ internal class GameState : State
 
     private List<Button> GetVisibleActionButtons()
     {
+        var buttonKeys = ResolveVisibleActionButtonKeys(
+            canSplit: _round.CanSplit(),
+            canDoubleDown: _round.CanDoubleDown(),
+            canSurrender: _round.CanSurrender());
+
         var buttons = new List<Button>(5)
         {
             _hitButton,
             _standButton
         };
 
-        if (_round.CanSplit())
+        if (buttonKeys.Contains("Split", StringComparer.Ordinal))
             buttons.Add(_splitButton);
-        if (_round.CanDoubleDown())
+        if (buttonKeys.Contains("Double", StringComparer.Ordinal))
             buttons.Add(_doubleButton);
-        if (_round.CanSurrender())
+        if (buttonKeys.Contains("Surrender", StringComparer.Ordinal))
             buttons.Add(_surrenderButton);
 
         return buttons;
@@ -419,13 +435,14 @@ internal class GameState : State
         for (int i = 0; i < totalHands; i++)
             handCardCounts[i] = GetPlayerCardCount(i);
 
-        return GameLayoutCalculator.ComputeMultiHandCardCenter(
+        return GameLayoutCalculator.ComputeAdaptiveMultiHandCardCenter(
             vp.Width,
             _cardSize,
             handCardCounts,
             handIndex,
             cardIndexInHand,
-            centerY);
+            centerY,
+            _activePlayerHandIndex);
     }
 
     private bool IsPlayerInteractionEnabled()
@@ -468,7 +485,7 @@ internal class GameState : State
 
         // Adding a card changes centered row layout; reflow existing cards now
         // (without waiting for resize) to avoid temporary overlap artifacts.
-        RepositionRecipientCards(recipient, duration: 0.25f, delay: delay, excludeSprite: sprite);
+        RepositionRecipientCards(recipient, duration: 0.25f, delay: 0f, excludeSprite: sprite);
 
         _cardLayer.Add(sprite);
         _dealCardIndex++;
@@ -603,7 +620,13 @@ internal class GameState : State
 
     private void OnPlayerTurnStarted(PlayerTurnStarted evt)
     {
+        bool activeChanged = _activePlayerHandIndex != evt.HandIndex;
         _activePlayerHandIndex = evt.HandIndex;
+
+        // Active hand changes can toggle stacked/inactive layout states.
+        // Reflow all player cards so inactive hands collapse and active hand opens.
+        if (activeChanged)
+            RepositionPlayerCards();
     }
 
     private void OnPlayerHit(PlayerHit evt)
@@ -918,6 +941,16 @@ internal class GameState : State
         if (WasKeyJustPressed(Keys.F3))
             _showAlignmentGuides = !_showAlignmentGuides;
 
+        if (WasKeyJustPressed(Keys.F1))
+            _devMenu.Toggle();
+
+        if (_devMenu.IsOpen)
+        {
+            _devMenu.Update(gameTime, _currentKeyboardState, _previousKeyboardState);
+            CommitKeyboardState();
+            return;
+        }
+
         if (WasKeyJustPressed(Keys.Escape))
         {
             if (_isQuitConfirmationVisible)
@@ -1017,6 +1050,9 @@ internal class GameState : State
             if (_isPaused)
                 DrawPauseOverlay(gameTime, spriteBatch);
 
+            if (_devMenu.IsOpen)
+                _devMenu.Draw(gameTime, spriteBatch, _pixelTexture, _font, GetResponsiveScale(1f));
+
             spriteBatch.End();
             return;
         }
@@ -1036,6 +1072,9 @@ internal class GameState : State
 
             if (_isPaused)
                 DrawPauseOverlay(gameTime, spriteBatch);
+
+            if (_devMenu.IsOpen)
+                _devMenu.Draw(gameTime, spriteBatch, _pixelTexture, _font, GetResponsiveScale(1f));
 
             spriteBatch.End();
             return;
@@ -1088,6 +1127,16 @@ internal class GameState : State
         {
             spriteBatch.Begin();
             DrawPauseOverlay(gameTime, spriteBatch);
+            if (_devMenu.IsOpen)
+                _devMenu.Draw(gameTime, spriteBatch, _pixelTexture, _font, GetResponsiveScale(1f));
+            spriteBatch.End();
+            return;
+        }
+
+        if (_devMenu.IsOpen)
+        {
+            spriteBatch.Begin();
+            _devMenu.Draw(gameTime, spriteBatch, _pixelTexture, _font, GetResponsiveScale(1f));
             spriteBatch.End();
         }
     }
@@ -1315,6 +1364,8 @@ internal class GameState : State
             tracked.Sprite.Opacity = 1f;
             tracked.Sprite.ScaleX = 1f;
         }
+
+        _devMenu.HandleResize(vp);
     }
 
     public override void PostUpdate(GameTime gameTime) { }
@@ -1354,7 +1405,21 @@ internal class GameState : State
         if (bool.TryParse(rawValue, out var parsed))
             return parsed;
 
-        return !rawValue.Equals("No", StringComparison.OrdinalIgnoreCase);
+        return true;
+    }
+
+    internal static IReadOnlyList<string> ResolveVisibleActionButtonKeys(bool canSplit, bool canDoubleDown, bool canSurrender)
+    {
+        var buttonKeys = new List<string>(5) { "Hit", "Stand" };
+
+        if (canSplit)
+            buttonKeys.Add("Split");
+        if (canDoubleDown)
+            buttonKeys.Add("Double");
+        if (canSurrender)
+            buttonKeys.Add("Surrender");
+
+        return buttonKeys;
     }
 
     private readonly record struct TrackedCardSprite(CardSprite Sprite, string Recipient, int HandIndex, int CardIndexInHand);

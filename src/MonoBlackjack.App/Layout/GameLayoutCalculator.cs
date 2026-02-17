@@ -12,9 +12,19 @@ public static class GameLayoutCalculator
     public const float DealerCardsYRatio = 0.18f;
     public const float PlayerCardsYRatio = 0.52f;
     public const float SingleHandSpacingRatio = 1.08f;
-    public const float MultiHandCardStepRatio = 0.72f;
+    // Multi-hand card step matches single-hand/dealer spacing by default.
+    // Compression only kicks in if the full multi-hand layout cannot fit.
+    public const float MultiHandCardStepRatio = SingleHandSpacingRatio;
     public const float MultiHandGapRatio = 1.2f;
     public const float MinMultiHandGapViewportRatio = 0.05f;
+    public const float StackedInactiveCardStepRatio = 0.22f;
+    public const float MinStackedInactiveCardStepRatio = 0.12f;
+    public const float MinActiveCardStepRatio = 0.45f;
+    public const float StackedHandGapRatio = 0.8f;
+    public const float MinStackedHandGapViewportRatio = 0.015f;
+    public const float TwoHandMinGapCardRatio = 0.35f;
+    public const float CompressedMinHandGapCardRatio = 0.12f;
+    public const float CompressedMinHandGapViewportRatio = 0.01f;
     public const float ActionButtonPaddingRatio = UIConstants.ButtonPaddingRatio;
     public const int MaxActionButtons = UIConstants.MaxActionButtons;
 
@@ -131,6 +141,145 @@ public static class GameLayoutCalculator
         return totalWidth;
     }
 
+    public static float ComputeMultiHandWidth(IReadOnlyList<int> handCardCounts, Vector2 cardSize, IReadOnlyList<float> cardStepsByHand, float handGap)
+    {
+        ArgumentNullException.ThrowIfNull(handCardCounts);
+        ArgumentNullException.ThrowIfNull(cardStepsByHand);
+
+        if (handCardCounts.Count != cardStepsByHand.Count)
+            throw new ArgumentException("Hand counts and card-step arrays must have equal length.", nameof(cardStepsByHand));
+
+        float totalWidth = 0f;
+        for (int i = 0; i < handCardCounts.Count; i++)
+        {
+            int cardCount = Math.Max(handCardCounts[i], 1);
+            totalWidth += cardSize.X + cardStepsByHand[i] * (cardCount - 1);
+        }
+
+        if (handCardCounts.Count > 1)
+            totalWidth += handGap * (handCardCounts.Count - 1);
+
+        return totalWidth;
+    }
+
+    public static Vector2 ComputeAdaptiveMultiHandCardCenter(
+        int viewportWidth,
+        Vector2 cardSize,
+        IReadOnlyList<int> handCardCounts,
+        int handIndex,
+        int cardIndexInHand,
+        float centerY,
+        int activeHandIndex)
+    {
+        ArgumentNullException.ThrowIfNull(handCardCounts);
+        if (handCardCounts.Count == 0)
+            throw new ArgumentException("At least one hand card count is required.", nameof(handCardCounts));
+        if (handIndex < 0 || handIndex >= handCardCounts.Count)
+            throw new ArgumentOutOfRangeException(nameof(handIndex), handIndex, "Hand index is out of range.");
+
+        int currentHandCount = Math.Max(handCardCounts[handIndex], 1);
+        if (cardIndexInHand < 0 || cardIndexInHand >= currentHandCount)
+            throw new ArgumentOutOfRangeException(nameof(cardIndexInHand), cardIndexInHand, "Card index is out of range for the selected hand.");
+
+        if (handCardCounts.Count == 1)
+            return ComputeRowCardCenter(viewportWidth, cardSize, currentHandCount, cardIndexInHand, centerY);
+
+        bool hasActiveHand = activeHandIndex >= 0 && activeHandIndex < handCardCounts.Count;
+        if (!hasActiveHand)
+        {
+            // No active hand context: fall back to symmetric multi-hand layout.
+            return ComputeMultiHandCardCenter(viewportWidth, cardSize, handCardCounts, handIndex, cardIndexInHand, centerY);
+        }
+
+        var halfCard = cardSize / 2f;
+        float maxWidth = viewportWidth * 0.9f;
+
+        float defaultStep = cardSize.X * MultiHandCardStepRatio;
+        float stackedStep = cardSize.X * StackedInactiveCardStepRatio;
+        float minStackedStep = cardSize.X * MinStackedInactiveCardStepRatio;
+        float minActiveStep = cardSize.X * MinActiveCardStepRatio;
+
+        float handGap = Math.Max(cardSize.X * MultiHandGapRatio, viewportWidth * MinMultiHandGapViewportRatio);
+        handGap = Math.Max(handGap, GetTwoHandGapFloor(handCardCounts, cardSize));
+
+        var perHandStep = new float[handCardCounts.Count];
+        for (int h = 0; h < handCardCounts.Count; h++)
+            perHandStep[h] = defaultStep;
+
+        float totalWidth = ComputeMultiHandWidth(handCardCounts, cardSize, perHandStep, handGap);
+
+        // If the fully-open layout does not fit, stack inactive hands first.
+        if (totalWidth > maxWidth)
+        {
+            handGap = Math.Max(cardSize.X * StackedHandGapRatio, viewportWidth * MinStackedHandGapViewportRatio);
+            handGap = Math.Max(handGap, GetTwoHandGapFloor(handCardCounts, cardSize));
+
+            for (int h = 0; h < handCardCounts.Count; h++)
+                perHandStep[h] = h == activeHandIndex ? defaultStep : stackedStep;
+
+            totalWidth = ComputeMultiHandWidth(handCardCounts, cardSize, perHandStep, handGap);
+
+            // If it still doesn't fit, compress gaps/inactive/active in that order.
+            const int maxIterations = 48;
+            int iteration = 0;
+            while (totalWidth > maxWidth + 0.001f && iteration++ < maxIterations)
+            {
+                bool changed = false;
+
+                float minGap = Math.Max(viewportWidth * 0.005f, 0f);
+                if (handGap > minGap)
+                {
+                    float nextGap = Math.Max(minGap, handGap * 0.92f);
+                    if (nextGap < handGap - 0.0001f)
+                    {
+                        handGap = nextGap;
+                        changed = true;
+                    }
+                }
+
+                for (int h = 0; h < handCardCounts.Count; h++)
+                {
+                    if (h == activeHandIndex)
+                        continue;
+
+                    if (perHandStep[h] > minStackedStep)
+                    {
+                        float next = Math.Max(minStackedStep, perHandStep[h] * 0.9f);
+                        if (next < perHandStep[h] - 0.0001f)
+                        {
+                            perHandStep[h] = next;
+                            changed = true;
+                        }
+                    }
+                }
+
+                if (perHandStep[activeHandIndex] > minActiveStep)
+                {
+                    float next = Math.Max(minActiveStep, perHandStep[activeHandIndex] * 0.93f);
+                    if (next < perHandStep[activeHandIndex] - 0.0001f)
+                    {
+                        perHandStep[activeHandIndex] = next;
+                        changed = true;
+                    }
+                }
+
+                totalWidth = ComputeMultiHandWidth(handCardCounts, cardSize, perHandStep, handGap);
+                if (!changed)
+                    break;
+            }
+        }
+
+        float handStartX = viewportWidth / 2f - totalWidth / 2f;
+        for (int h = 0; h < handIndex; h++)
+        {
+            int count = Math.Max(handCardCounts[h], 1);
+            handStartX += cardSize.X + perHandStep[h] * (count - 1) + handGap;
+        }
+
+        float cardCenterX = handStartX + halfCard.X + perHandStep[handIndex] * cardIndexInHand;
+        return new Vector2(cardCenterX, centerY);
+    }
+
     public static Vector2 ComputeMultiHandCardCenter(
         int viewportWidth,
         Vector2 cardSize,
@@ -155,6 +304,7 @@ public static class GameLayoutCalculator
         var halfCard = cardSize / 2f;
         var cardStep = cardSize.X * MultiHandCardStepRatio;
         var handGap = Math.Max(cardSize.X * MultiHandGapRatio, viewportWidth * MinMultiHandGapViewportRatio);
+        handGap = Math.Max(handGap, GetTwoHandGapFloor(handCardCounts, cardSize));
 
         float totalWidth = ComputeMultiHandWidth(handCardCounts, cardSize, cardStep, handGap);
         float maxWidth = viewportWidth * 0.9f;
@@ -166,7 +316,8 @@ public static class GameLayoutCalculator
             for (int i = 0; i < handCardCounts.Count; i++)
                 cardStepUnits += Math.Max(handCardCounts[i], 1) - 1;
 
-            handGap = Math.Max(cardSize.X * 0.12f, viewportWidth * 0.01f);
+            handGap = Math.Max(cardSize.X * CompressedMinHandGapCardRatio, viewportWidth * CompressedMinHandGapViewportRatio);
+            handGap = Math.Max(handGap, GetTwoHandGapFloor(handCardCounts, cardSize));
             var remainingForStep = maxWidth - fixedWidth - (handGap * handGapUnits);
             if (remainingForStep < 0f)
             {
@@ -192,5 +343,10 @@ public static class GameLayoutCalculator
 
         float cardCenterX = handStartX + halfCard.X + cardStep * cardIndexInHand;
         return new Vector2(cardCenterX, centerY);
+    }
+
+    private static float GetTwoHandGapFloor(IReadOnlyList<int> handCardCounts, Vector2 cardSize)
+    {
+        return handCardCounts.Count == 2 ? cardSize.X * TwoHandMinGapCardRatio : 0f;
     }
 }

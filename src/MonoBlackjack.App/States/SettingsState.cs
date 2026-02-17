@@ -379,27 +379,32 @@ internal sealed class SettingsState : State
     private Dictionary<string, string> BuildCurrentSettings()
     {
         var current = new Dictionary<string, string>(_game.CurrentRules.ToSettingsDictionary(), StringComparer.OrdinalIgnoreCase);
-        foreach (var kvp in _loadedSettings)
-        {
-            if (!current.ContainsKey(kvp.Key))
-                current[kvp.Key] = kvp.Value;
-        }
+        SetLoadedOrDefault(current, SettingKeybindHit, "H");
+        SetLoadedOrDefault(current, SettingKeybindStand, "S");
+        SetLoadedOrDefault(current, SettingKeybindDouble, "D");
+        SetLoadedOrDefault(current, SettingKeybindSplit, "P");
+        SetLoadedOrDefault(current, SettingKeybindSurrender, "R");
+        SetLoadedOrDefault(current, SettingKeybindPause, "Escape");
 
-        current.TryAdd(SettingKeybindHit, "H");
-        current.TryAdd(SettingKeybindStand, "S");
-        current.TryAdd(SettingKeybindDouble, "D");
-        current.TryAdd(SettingKeybindSplit, "P");
-        current.TryAdd(SettingKeybindSurrender, "R");
-        current.TryAdd(SettingKeybindPause, "Escape");
+        SetLoadedOrDefault(current, SettingGraphicsBackground, "Green");
+        SetLoadedOrDefault(current, SettingGraphicsFontScale, "1.0");
+        SetLoadedOrDefault(current, SettingGraphicsCardBack, "Classic");
 
-        current.TryAdd(SettingGraphicsBackground, "Green");
-        current.TryAdd(SettingGraphicsFontScale, "1.0");
-        current.TryAdd(SettingGraphicsCardBack, "Classic");
-
-        current.TryAdd(GameConfig.SettingShowHandValues, "True");
-        current.TryAdd(GameConfig.SettingShowRecommendations, "False");
+        SetLoadedOrDefault(current, GameConfig.SettingShowHandValues, "True");
+        SetLoadedOrDefault(current, GameConfig.SettingShowRecommendations, "False");
 
         return current;
+    }
+
+    private void SetLoadedOrDefault(Dictionary<string, string> settings, string key, string defaultValue)
+    {
+        if (_loadedSettings.TryGetValue(key, out var value))
+        {
+            settings[key] = value;
+            return;
+        }
+
+        settings[key] = defaultValue;
     }
 
     private void AddRow(
@@ -524,7 +529,7 @@ internal sealed class SettingsState : State
 
     private void OnSaveClicked(object? sender, EventArgs e)
     {
-        var settings = BuildSavedSettings(_loadedSettings, GetSelectedSettings());
+        var settings = BuildSavedSettings(GetSelectedSettings());
 
         var newRules = GameRules.FromSettings(settings);
         _game.UpdateRules(newRules);
@@ -538,17 +543,9 @@ internal sealed class SettingsState : State
         _statusSeconds = 2.0f;
     }
 
-    internal static Dictionary<string, string> BuildSavedSettings(
-        IReadOnlyDictionary<string, string> loadedSettings,
-        IReadOnlyDictionary<string, string> selectedSettings)
+    internal static Dictionary<string, string> BuildSavedSettings(IReadOnlyDictionary<string, string> selectedSettings)
     {
-        var settings = new Dictionary<string, string>(loadedSettings, StringComparer.OrdinalIgnoreCase);
-        foreach (var kvp in selectedSettings)
-            settings[kvp.Key] = kvp.Value;
-
-        // Legacy setting moved to menu mode selection.
-        settings.Remove(GameConfig.SettingBetFlow);
-        return settings;
+        return new Dictionary<string, string>(selectedSettings, StringComparer.OrdinalIgnoreCase);
     }
 
     private Dictionary<string, string> GetSelectedSettings()

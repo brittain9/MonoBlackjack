@@ -180,8 +180,7 @@ public sealed record GameRules
             [GameConfig.SettingResplitAces] = ResplitAces.ToString(),
             [GameConfig.SettingMaxSplits] = MaxSplits.ToString(CultureInfo.InvariantCulture),
             [GameConfig.SettingDoubleDownRestriction] = DoubleDownRestriction.ToString(),
-            [GameConfig.SettingPenetrationPercent] = PenetrationPercent.ToString(CultureInfo.InvariantCulture),
-            [GameConfig.SettingBetFlow] = BetFlow.ToString()
+            [GameConfig.SettingPenetrationPercent] = PenetrationPercent.ToString(CultureInfo.InvariantCulture)
         };
     }
 
@@ -244,12 +243,6 @@ public sealed record GameRules
             && int.TryParse(penetrationPercent, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedPenetration))
         {
             rules = rules with { PenetrationPercent = Math.Clamp(parsedPenetration, 1, 100) };
-        }
-
-        if (settings.TryGetValue(GameConfig.SettingBetFlow, out var betFlow)
-            && Enum.TryParse<BetFlowMode>(betFlow, ignoreCase: true, out var parsedBetFlow))
-        {
-            rules = rules with { BetFlow = parsedBetFlow };
         }
 
         return rules;

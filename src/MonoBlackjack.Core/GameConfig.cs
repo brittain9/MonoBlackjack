@@ -28,7 +28,6 @@ public static class GameConfig
     public const string SettingMaxSplits = "MaxSplits";
     public const string SettingDoubleDownRestriction = "DoubleDownRestriction";
     public const string SettingPenetrationPercent = "PenetrationPercent";
-    public const string SettingBetFlow = "BetFlow";
     public const string SettingShowHandValues = "ShowHandValues";
     public const string SettingShowRecommendations = "ShowRecommendations";
 

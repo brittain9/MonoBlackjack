@@ -3,7 +3,7 @@ using MonoBlackjack.Core.Ports;
 
 namespace MonoBlackjack.App.Tests;
 
-public class Phase5StatsTests
+public class StatsDashboardTests
 {
     [Fact]
     public void StatsState_ComputeBankrollSummary_ReturnsLatestPeakAndTrough()

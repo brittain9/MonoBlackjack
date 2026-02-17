@@ -14,12 +14,14 @@ public class Shoe
     private readonly Random? _rng;
     private readonly bool _useCryptoShuffle;
     private List<Card> _cards;
+    private readonly Queue<Card> _forcedDraws = new();
 
     public int Remaining => _cards.Count;
     public int DeckCount => _deckCount;
     public int TotalCards => _deckCount * 52;
     public int CutCardRemainingThreshold => ComputeCutCardRemainingThreshold(TotalCards, _penetrationPercent);
     public bool IsCutCardReached => Remaining <= CutCardRemainingThreshold;
+    public int ForcedDrawCount => _forcedDraws.Count;
 
     public Shoe(int deckCount, int penetrationPercent, bool useCryptographicShuffle, Random? rng = null)
     {
@@ -58,6 +60,9 @@ public class Shoe
     /// </summary>
     public Card Draw()
     {
+        if (_forcedDraws.Count > 0)
+            return _forcedDraws.Dequeue();
+
         if (_cards.Count == 0)
         {
             _cards = BuildCards(_deckCount);
@@ -67,6 +72,34 @@ public class Shoe
         var card = _cards[^1];
         _cards.RemoveAt(_cards.Count - 1);
         return card;
+    }
+
+    public void EnqueueForcedDraw(Card card)
+    {
+        _forcedDraws.Enqueue(card);
+    }
+
+    public void ClearForcedDraws()
+    {
+        _forcedDraws.Clear();
+    }
+
+    public IReadOnlyList<Card> PeekForcedDraws(int maxCount = 10)
+    {
+        if (maxCount < 0)
+            throw new ArgumentOutOfRangeException(nameof(maxCount), maxCount, "Max count cannot be negative.");
+
+        var result = new List<Card>(Math.Min(maxCount, _forcedDraws.Count));
+        int count = 0;
+        foreach (var card in _forcedDraws)
+        {
+            if (count++ >= maxCount)
+                break;
+
+            result.Add(card);
+        }
+
+        return result;
     }
 
     /// <summary>

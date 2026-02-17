@@ -6,7 +6,7 @@ using MonoBlackjack.Core;
 
 namespace MonoBlackjack.App.Tests;
 
-public class Phase4StateTests
+public class StateAndSettingsTests
 {
     [Fact]
     public void MenuState_ResolveModeFromMenuLabel_ReturnsExpectedModes()
@@ -22,45 +22,44 @@ public class Phase4StateTests
     }
 
     [Fact]
-    public void SettingsState_BuildSavedSettings_MergesOverridesPreservesUnknownAndRemovesBetFlow()
+    public void SettingsState_BuildSavedSettings_PersistsOnlySelectedValues()
     {
-        var loaded = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            [GameConfig.SettingBetFlow] = "Betting",
-            [GameConfig.SettingShowHandValues] = "True",
-            ["LegacyCustomSetting"] = "KeepMe"
-        };
-
         var selected = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             [GameConfig.SettingShowHandValues] = "False",
             [GameConfig.SettingShowRecommendations] = "True"
         };
 
-        var saved = SettingsState.BuildSavedSettings(loaded, selected);
+        var saved = SettingsState.BuildSavedSettings(selected);
 
-        Assert.False(saved.ContainsKey(GameConfig.SettingBetFlow));
+        Assert.Equal(2, saved.Count);
         Assert.Equal("False", saved[GameConfig.SettingShowHandValues]);
         Assert.Equal("True", saved[GameConfig.SettingShowRecommendations]);
-        Assert.Equal("KeepMe", saved["LegacyCustomSetting"]);
+        Assert.False(saved.ContainsKey("LegacyCustomSetting"));
+        Assert.False(saved.ContainsKey("BetFlow"));
     }
 
     [Fact]
-    public void GameState_ResolveShowHandValues_UsesDefaultAndParsesLegacyValues()
+    public void GameState_ResolveShowHandValues_UsesDefaultAndStrictBooleanParsing()
     {
         var missing = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var explicitFalse = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             [GameConfig.SettingShowHandValues] = "False"
         };
-        var legacyNo = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        var invalidNo = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             [GameConfig.SettingShowHandValues] = "No"
+        };
+        var invalid = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [GameConfig.SettingShowHandValues] = "Invalid"
         };
 
         Assert.True(GameState.ResolveShowHandValues(missing));
         Assert.False(GameState.ResolveShowHandValues(explicitFalse));
-        Assert.False(GameState.ResolveShowHandValues(legacyNo));
+        Assert.True(GameState.ResolveShowHandValues(invalidNo));
+        Assert.True(GameState.ResolveShowHandValues(invalid));
     }
 
     [Fact]
@@ -105,6 +104,39 @@ public class Phase4StateTests
         popped = BlackjackGame.TryPopStateHistory(new List<State>(), out poppedState);
         Assert.False(popped);
         Assert.Null(poppedState);
+    }
+
+    [Fact]
+    public void GameState_ResolveVisibleActionButtonKeys_AlwaysIncludesCoreActions()
+    {
+        var keys = GameState.ResolveVisibleActionButtonKeys(
+            canSplit: false,
+            canDoubleDown: false,
+            canSurrender: false);
+
+        Assert.Equal(["Hit", "Stand"], keys);
+    }
+
+    [Fact]
+    public void GameState_ResolveVisibleActionButtonKeys_OrdersOptionalActionsConsistently()
+    {
+        var keys = GameState.ResolveVisibleActionButtonKeys(
+            canSplit: true,
+            canDoubleDown: true,
+            canSurrender: true);
+
+        Assert.Equal(["Hit", "Stand", "Split", "Double", "Surrender"], keys);
+    }
+
+    [Fact]
+    public void GameState_ResolveVisibleActionButtonKeys_IncludesOnlyEnabledOptionalActions()
+    {
+        var keys = GameState.ResolveVisibleActionButtonKeys(
+            canSplit: true,
+            canDoubleDown: false,
+            canSurrender: true);
+
+        Assert.Equal(["Hit", "Stand", "Split", "Surrender"], keys);
     }
 
     private sealed class TestState : State

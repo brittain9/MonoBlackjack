@@ -187,4 +187,47 @@ public class ShoeTests
             cards.Count(c => c.Suit == suit).Should().Be(13);
         }
     }
+
+    [Fact]
+    public void Shoe_ForcedDraws_AreReturnedBeforeShoeCards()
+    {
+        var shoe = new Shoe(1, 75, false, new Random(42));
+        var forced = new Card(Rank.Ace, Suit.Spades);
+        var remainingBefore = shoe.Remaining;
+
+        shoe.EnqueueForcedDraw(forced);
+        var drawn = shoe.Draw();
+
+        drawn.Should().Be(forced);
+        shoe.Remaining.Should().Be(remainingBefore);
+    }
+
+    [Fact]
+    public void Shoe_ClearForcedDraws_RemovesQueuedForcedCards()
+    {
+        var shoe = new Shoe(1, 75, false, new Random(42));
+
+        shoe.EnqueueForcedDraw(new Card(Rank.Ace, Suit.Spades));
+        shoe.EnqueueForcedDraw(new Card(Rank.King, Suit.Hearts));
+        shoe.ForcedDrawCount.Should().Be(2);
+
+        shoe.ClearForcedDraws();
+
+        shoe.ForcedDrawCount.Should().Be(0);
+    }
+
+    [Fact]
+    public void Shoe_PeekForcedDraws_ReturnsInQueueOrder()
+    {
+        var shoe = new Shoe(1, 75, false, new Random(42));
+        var first = new Card(Rank.Ten, Suit.Clubs);
+        var second = new Card(Rank.Ten, Suit.Diamonds);
+        var third = new Card(Rank.Ten, Suit.Hearts);
+
+        shoe.EnqueueForcedDraw(first);
+        shoe.EnqueueForcedDraw(second);
+        shoe.EnqueueForcedDraw(third);
+
+        shoe.PeekForcedDraws(2).Should().Equal([first, second]);
+    }
 }

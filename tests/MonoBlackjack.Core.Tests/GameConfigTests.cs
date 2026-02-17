@@ -36,6 +36,19 @@ public class GameConfigTests
     }
 
     [Fact]
+    public void GameRules_FromSettings_IgnoresUnsupportedBetFlowKey()
+    {
+        var updates = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["BetFlow"] = BetFlowMode.FreePlay.ToString()
+        };
+
+        var rules = GameRules.FromSettings(updates);
+
+        rules.BetFlow.Should().Be(BetFlowMode.Betting);
+    }
+
+    [Fact]
     public void GameRules_ToSettingsDictionary_ContainsAllKeys()
     {
         var rules = GameRules.Standard;
@@ -50,5 +63,6 @@ public class GameConfigTests
         settings.Keys.Should().Contain(GameConfig.SettingMaxSplits);
         settings.Keys.Should().Contain(GameConfig.SettingDoubleDownRestriction);
         settings.Keys.Should().Contain(GameConfig.SettingPenetrationPercent);
+        settings.Keys.Should().NotContain("BetFlow");
     }
 }

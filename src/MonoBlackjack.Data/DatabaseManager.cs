@@ -129,22 +129,5 @@ public sealed class DatabaseManager
             CREATE INDEX IF NOT EXISTS IX_Decision_DealerUpcard ON Decision(DealerUpcard);
             """;
         command.ExecuteNonQuery();
-
-        RunMigrations(connection);
-    }
-
-    private static void RunMigrations(SqliteConnection connection)
-    {
-        // Migration: add DealerBusted column to Round table (for pre-existing databases)
-        try
-        {
-            using var cmd = connection.CreateCommand();
-            cmd.CommandText = "ALTER TABLE Round ADD COLUMN DealerBusted INTEGER NOT NULL DEFAULT 0;";
-            cmd.ExecuteNonQuery();
-        }
-        catch (SqliteException)
-        {
-            // Column already exists — ignore
-        }
     }
 }
