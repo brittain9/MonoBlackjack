@@ -15,3 +15,7 @@ Features:
 - Domain Driven Design
 - Event driven architecture
 - Unit tests
+  
+![menu](img/menu.png)
+![game](img/game.png)
+![stats](img/stats.png)
