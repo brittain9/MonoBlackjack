@@ -31,12 +31,9 @@ public class BlackjackGame : Microsoft.Xna.Framework.Game
 
     public void GoBack()
     {
-        if (_stateHistory.Count > 0)
+        if (TryPopStateHistory(_stateHistory, out var previousState))
         {
-            int lastIndex = _stateHistory.Count - 1;
-            var previousState = _stateHistory[lastIndex];
-            _stateHistory.RemoveAt(lastIndex);
-            QueueTransition(previousState, pushHistory: false, clearHistory: false);
+            QueueTransition(previousState!, pushHistory: false, clearHistory: false);
             return;
         }
 
@@ -182,13 +179,7 @@ public class BlackjackGame : Microsoft.Xna.Framework.Game
 
     private void PushStateHistory(State state)
     {
-        _stateHistory.Add(state);
-
-        if (_stateHistory.Count <= MaxStateHistory)
-            return;
-
-        _stateHistory[0].Dispose();
-        _stateHistory.RemoveAt(0);
+        PushStateHistoryEntry(_stateHistory, state, MaxStateHistory);
     }
 
     private void ClearStateHistory()
@@ -196,6 +187,31 @@ public class BlackjackGame : Microsoft.Xna.Framework.Game
         foreach (var state in _stateHistory)
             state.Dispose();
         _stateHistory.Clear();
+    }
+
+    internal static bool TryPopStateHistory(List<State> history, out State? state)
+    {
+        if (history.Count == 0)
+        {
+            state = null;
+            return false;
+        }
+
+        int lastIndex = history.Count - 1;
+        state = history[lastIndex];
+        history.RemoveAt(lastIndex);
+        return true;
+    }
+
+    internal static void PushStateHistoryEntry(List<State> history, State state, int maxStateHistory)
+    {
+        history.Add(state);
+
+        if (history.Count <= maxStateHistory)
+            return;
+
+        history[0].Dispose();
+        history.RemoveAt(0);
     }
 }
 

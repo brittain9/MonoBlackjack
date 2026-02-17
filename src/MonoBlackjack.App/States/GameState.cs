@@ -17,6 +17,7 @@ namespace MonoBlackjack;
 internal class GameState : State
 {
     private readonly Texture2D _pixelTexture;
+    private readonly int _profileId;
     private readonly GameRules _rules;
     private readonly Shoe _shoe;
     private readonly CardRenderer _cardRenderer;
@@ -60,6 +61,7 @@ internal class GameState : State
     private bool _isPaused;
     private bool _isQuitConfirmationVisible;
     private bool _showAlignmentGuides;
+    private bool _showHandValues = true;
 
     private enum GamePhase { Betting, Playing, Bankrupt }
     private GamePhase _gamePhase;
@@ -87,11 +89,14 @@ internal class GameState : State
         GraphicsDevice graphicsDevice,
         ContentManager content,
         IStatsRepository statsRepository,
-        int profileId)
+        int profileId,
+        BetFlowMode mode)
         : base(game, graphicsDevice, content)
     {
         _pixelTexture = game.PixelTexture;
-        _rules = game.CurrentRules;
+        _profileId = profileId;
+        _rules = ApplySelectedMode(game.CurrentRules, mode);
+        ReloadAssistanceSettings();
 
         _cardRenderer = new CardRenderer();
         _cardRenderer.LoadTextures(content);
@@ -1205,6 +1210,9 @@ internal class GameState : State
 
     private void DrawHandValues(SpriteBatch spriteBatch)
     {
+        if (!_showHandValues)
+            return;
+
         if (_round == null! || _gamePhase != GamePhase.Playing)
             return;
 
@@ -1294,6 +1302,7 @@ internal class GameState : State
 
     public override void HandleResize(Rectangle vp)
     {
+        ReloadAssistanceSettings();
         CalculatePositions();
         _sceneRenderer.HandleResize(vp);
 
@@ -1324,6 +1333,28 @@ internal class GameState : State
         _tweenManager.Clear();
         _cardLayer.Clear();
         _uiLayer.Clear();
+    }
+
+    private void ReloadAssistanceSettings()
+    {
+        var settings = _game.SettingsRepository.LoadSettings(_profileId);
+        _showHandValues = ResolveShowHandValues(settings);
+    }
+
+    internal static GameRules ApplySelectedMode(GameRules rules, BetFlowMode mode)
+    {
+        return rules with { BetFlow = mode };
+    }
+
+    internal static bool ResolveShowHandValues(IReadOnlyDictionary<string, string> settings)
+    {
+        if (!settings.TryGetValue(GameConfig.SettingShowHandValues, out var rawValue))
+            return true;
+
+        if (bool.TryParse(rawValue, out var parsed))
+            return parsed;
+
+        return !rawValue.Equals("No", StringComparison.OrdinalIgnoreCase);
     }
 
     private readonly record struct TrackedCardSprite(CardSprite Sprite, string Recipient, int HandIndex, int CardIndexInHand);
