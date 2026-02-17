@@ -83,7 +83,7 @@ public class GameRound
             if (_rules.BetFlow != BetFlowMode.FreePlay)
                 throw new ArgumentOutOfRangeException(nameof(amount), amount, "Bet must be greater than zero in betting mode.");
 
-            // Free play mode — no bankroll involved
+            // Freeplay mode — no bankroll involved
             _bets[0] = 0;
             _publish(new BetPlaced(_player.Name, 0));
             Phase = RoundPhase.Dealing;
@@ -91,7 +91,7 @@ public class GameRound
         }
 
         if (_rules.BetFlow == BetFlowMode.FreePlay)
-            throw new ArgumentOutOfRangeException(nameof(amount), amount, "Free play mode only supports zero-value bets.");
+            throw new ArgumentOutOfRangeException(nameof(amount), amount, "Freeplay mode only supports zero-value bets.");
 
         if (_player.Bank < _rules.MinimumBet)
             throw new InvalidOperationException("Insufficient bankroll to place minimum bet.");

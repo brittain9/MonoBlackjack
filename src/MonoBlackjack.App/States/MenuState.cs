@@ -10,11 +10,11 @@ namespace MonoBlackjack;
 internal class MenuState : State
 {
     internal const string CasinoModeLabel = "Casino Mode";
-    internal const string PracticeModeLabel = "Practice Mode";
+    internal const string FreeplayModeLabel = "Freeplay";
 
     private readonly Texture2D _logoTexture;
     private readonly Button _casinoButton;
-    private readonly Button _practiceButton;
+    private readonly Button _freeplayButton;
     private readonly Button _settingsButton;
     private readonly Button _statsButton;
     private readonly Button _quitButton;
@@ -30,22 +30,22 @@ internal class MenuState : State
         var buttonFont = content.Load<SpriteFont>("Fonts/MyFont");
 
         _casinoButton = new Button(buttonTexture, buttonFont) { Text = CasinoModeLabel, PenColor = Color.Black };
-        _practiceButton = new Button(buttonTexture, buttonFont) { Text = PracticeModeLabel, PenColor = Color.Black };
+        _freeplayButton = new Button(buttonTexture, buttonFont) { Text = FreeplayModeLabel, PenColor = Color.Black };
         _settingsButton = new Button(buttonTexture, buttonFont) { Text = "Settings", PenColor = Color.Black };
         _statsButton = new Button(buttonTexture, buttonFont) { Text = "Stats", PenColor = Color.Black };
         _quitButton = new Button(buttonTexture, buttonFont) { Text = "Quit", PenColor = Color.Black };
 
         _casinoButton.Click += (_, _) =>
             StartGame(ResolveModeFromMenuLabel(CasinoModeLabel));
-        _practiceButton.Click += (_, _) =>
-            StartGame(ResolveModeFromMenuLabel(PracticeModeLabel));
+        _freeplayButton.Click += (_, _) =>
+            StartGame(ResolveModeFromMenuLabel(FreeplayModeLabel));
         _settingsButton.Click += (_, _) =>
             _game.ChangeState(new SettingsState(_game, _graphicsDevice, _content, _game.SettingsRepository, _game.ActiveProfileId));
         _statsButton.Click += (_, _) =>
             _game.ChangeState(new StatsState(_game, _graphicsDevice, _content, _game.StatsRepository, _game.ActiveProfileId));
         _quitButton.Click += (_, _) => _game.Exit();
 
-        _buttons = [_casinoButton, _practiceButton, _settingsButton, _statsButton, _quitButton];
+        _buttons = [_casinoButton, _freeplayButton, _settingsButton, _statsButton, _quitButton];
 
         UpdateLayout();
     }
@@ -55,7 +55,7 @@ internal class MenuState : State
         return label switch
         {
             CasinoModeLabel => BetFlowMode.Betting,
-            PracticeModeLabel => BetFlowMode.FreePlay,
+            FreeplayModeLabel => BetFlowMode.FreePlay,
             _ => throw new ArgumentOutOfRangeException(nameof(label), label, "Unknown game mode label")
         };
     }

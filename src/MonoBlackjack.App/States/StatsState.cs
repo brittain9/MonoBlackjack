@@ -29,6 +29,7 @@ internal sealed class StatsState : State
 
     private Tab _activeTab = Tab.Overview;
     private MatrixMode _matrixMode = MatrixMode.Hard;
+    private KeybindMap _keybinds = null!;
 
     // Scroll state for Analysis tab
     private float _scrollOffset;
@@ -90,6 +91,7 @@ internal sealed class StatsState : State
 
         _buttons.AddRange([_overviewTab, _analysisTab, _matrixHardButton, _matrixSoftButton, _matrixPairsButton, _backButton]);
 
+        ReloadKeybinds();
         LoadData();
         UpdateLayout();
     }
@@ -127,6 +129,15 @@ internal sealed class StatsState : State
 
     public override void Update(GameTime gameTime)
     {
+        CaptureKeyboardState();
+
+        if (_keybinds.IsJustPressed(InputAction.Back, _currentKeyboardState, _previousKeyboardState))
+        {
+            _game.GoBack();
+            CommitKeyboardState();
+            return;
+        }
+
         foreach (var button in _buttons)
             button.Update(gameTime);
 
@@ -147,6 +158,8 @@ internal sealed class StatsState : State
         {
             _previousScrollValue = Mouse.GetState().ScrollWheelValue;
         }
+
+        CommitKeyboardState();
     }
 
     public override void PostUpdate(GameTime gameTime) { }
@@ -158,7 +171,14 @@ internal sealed class StatsState : State
 
     public override void HandleResize(Rectangle vp)
     {
+        ReloadKeybinds();
         UpdateLayout();
+    }
+
+    private void ReloadKeybinds()
+    {
+        var settings = _game.SettingsRepository.LoadSettings(_profileId);
+        _keybinds = KeybindMap.FromSettings(settings);
     }
 
     private void LoadData()

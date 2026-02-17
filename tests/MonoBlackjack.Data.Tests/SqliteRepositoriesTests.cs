@@ -142,6 +142,44 @@ public sealed class SqliteRepositoriesTests
     }
 
     [Fact]
+    public void SettingsRepository_SaveAndLoad_EnforcesCurrentSettingsContract()
+    {
+        var (database, path) = CreateDatabase();
+        try
+        {
+            var profiles = new SqliteProfileRepository(database);
+            var settingsRepo = new SqliteSettingsRepository(database);
+            var profile = profiles.GetOrCreateProfile("Default");
+
+            var settings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [GameConfig.SettingShowHandValues] = "false",
+                [GameConfig.SettingKeybindPause] = "escape",
+                [GameConfig.SettingKeybindBack] = "Back",
+                [GameConfig.SettingNumberOfDecks] = "999",
+                ["LegacyCustomSetting"] = "on"
+            };
+
+            settingsRepo.SaveSettings(profile.Id, settings);
+            var loaded = settingsRepo.LoadSettings(profile.Id);
+
+            loaded.Should().ContainKey(GameConfig.SettingShowHandValues);
+            loaded[GameConfig.SettingShowHandValues].Should().Be("False");
+            loaded.Should().ContainKey(GameConfig.SettingKeybindPause);
+            loaded[GameConfig.SettingKeybindPause].Should().Be("Escape");
+            loaded.Should().ContainKey(GameConfig.SettingKeybindBack);
+            loaded[GameConfig.SettingKeybindBack].Should().Be("Back");
+
+            loaded.Should().NotContainKey(GameConfig.SettingNumberOfDecks);
+            loaded.Should().NotContainKey("LegacyCustomSetting");
+        }
+        finally
+        {
+            TryDelete(path);
+        }
+    }
+
+    [Fact]
     public void StatsRepository_IgnoresNonCanonicalDealerUpcards_InDashboardAggregations()
     {
         var (database, path) = CreateDatabase();

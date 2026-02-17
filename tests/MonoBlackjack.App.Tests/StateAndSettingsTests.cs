@@ -12,7 +12,7 @@ public class StateAndSettingsTests
     public void MenuState_ResolveModeFromMenuLabel_ReturnsExpectedModes()
     {
         Assert.Equal(BetFlowMode.Betting, MenuState.ResolveModeFromMenuLabel(MenuState.CasinoModeLabel));
-        Assert.Equal(BetFlowMode.FreePlay, MenuState.ResolveModeFromMenuLabel(MenuState.PracticeModeLabel));
+        Assert.Equal(BetFlowMode.FreePlay, MenuState.ResolveModeFromMenuLabel(MenuState.FreeplayModeLabel));
     }
 
     [Fact]
@@ -22,21 +22,68 @@ public class StateAndSettingsTests
     }
 
     [Fact]
-    public void SettingsState_BuildSavedSettings_PersistsOnlySelectedValues()
+    public void SettingsState_BuildSavedSettings_FiltersToSupportedContractValues()
     {
         var selected = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            [GameConfig.SettingShowHandValues] = "False",
-            [GameConfig.SettingShowRecommendations] = "True"
+            [GameConfig.SettingShowHandValues] = "false",
+            [GameConfig.SettingShowRecommendations] = "True",
+            [GameConfig.SettingKeybindHit] = "h",
+            [GameConfig.SettingGraphicsCardBack] = "Classic",
+            [GameConfig.SettingNumberOfDecks] = "999",
+            ["LegacyCustomSetting"] = "on"
         };
 
         var saved = SettingsState.BuildSavedSettings(selected);
 
-        Assert.Equal(2, saved.Count);
+        Assert.Equal(4, saved.Count);
         Assert.Equal("False", saved[GameConfig.SettingShowHandValues]);
         Assert.Equal("True", saved[GameConfig.SettingShowRecommendations]);
+        Assert.Equal("H", saved[GameConfig.SettingKeybindHit]);
+        Assert.Equal("Classic", saved[GameConfig.SettingGraphicsCardBack]);
         Assert.False(saved.ContainsKey("LegacyCustomSetting"));
-        Assert.False(saved.ContainsKey("BetFlow"));
+        Assert.False(saved.ContainsKey(GameConfig.SettingNumberOfDecks));
+    }
+
+    [Fact]
+    public void SettingsState_FindKeybindConflicts_AllowsPauseAndBackToShareEscape()
+    {
+        var selected = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [GameConfig.SettingKeybindHit] = "H",
+            [GameConfig.SettingKeybindStand] = "S",
+            [GameConfig.SettingKeybindDouble] = "D",
+            [GameConfig.SettingKeybindSplit] = "P",
+            [GameConfig.SettingKeybindSurrender] = "R",
+            [GameConfig.SettingKeybindPause] = "Escape",
+            [GameConfig.SettingKeybindBack] = "Escape"
+        };
+
+        var conflicts = SettingsState.FindKeybindConflicts(selected);
+
+        Assert.Empty(conflicts);
+    }
+
+    [Fact]
+    public void SettingsState_FindKeybindConflicts_RejectsDuplicateBindingsAcrossActions()
+    {
+        var selected = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [GameConfig.SettingKeybindHit] = "H",
+            [GameConfig.SettingKeybindStand] = "H",
+            [GameConfig.SettingKeybindDouble] = "D",
+            [GameConfig.SettingKeybindSplit] = "P",
+            [GameConfig.SettingKeybindSurrender] = "R",
+            [GameConfig.SettingKeybindPause] = "Escape",
+            [GameConfig.SettingKeybindBack] = "Escape"
+        };
+
+        var conflicts = SettingsState.FindKeybindConflicts(selected);
+
+        Assert.Single(conflicts);
+        Assert.Equal(GameConfig.SettingKeybindHit, conflicts[0].ExistingKey);
+        Assert.Equal(GameConfig.SettingKeybindStand, conflicts[0].DuplicateKey);
+        Assert.Equal("H", conflicts[0].Binding);
     }
 
     [Fact]

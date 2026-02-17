@@ -64,6 +64,7 @@ internal class GameState : State
     private bool _isQuitConfirmationVisible;
     private bool _showAlignmentGuides;
     private bool _showHandValues = true;
+    private KeybindMap _keybinds = null!;
 
     private enum GamePhase { Betting, Playing, Bankrupt }
     private GamePhase _gamePhase;
@@ -98,7 +99,7 @@ internal class GameState : State
         _pixelTexture = game.PixelTexture;
         _profileId = profileId;
         _rules = ApplySelectedMode(game.CurrentRules, mode);
-        ReloadAssistanceSettings();
+        ReloadPlayerSettings();
 
         _cardRenderer = new CardRenderer();
         _cardRenderer.LoadTextures(content);
@@ -300,24 +301,27 @@ internal class GameState : State
         _resetBankrollButton.Position = new Vector2(bankruptStartX, bankruptY);
         _menuButton.Position = new Vector2(bankruptStartX + _actionButtonSize.X + _actionButtonPadding, bankruptY);
 
-        // Pause menu layout
-        _pauseResumeButton.Size = _actionButtonSize;
-        _pauseSettingsButton.Size = _actionButtonSize;
-        _pauseQuitButton.Size = _actionButtonSize;
-        _pauseConfirmQuitButton.Size = _actionButtonSize;
-        _pauseCancelQuitButton.Size = _actionButtonSize;
+        // Pause menu layout (larger than gameplay actions for stronger visual hierarchy).
+        var pauseButtonSize = new Vector2(
+            Math.Clamp(vp.Width * 0.22f, 240f, 420f),
+            Math.Clamp(vp.Height * 0.08f, 54f, 86f));
+        _pauseResumeButton.Size = pauseButtonSize;
+        _pauseSettingsButton.Size = pauseButtonSize;
+        _pauseQuitButton.Size = pauseButtonSize;
+        _pauseConfirmQuitButton.Size = pauseButtonSize;
+        _pauseCancelQuitButton.Size = pauseButtonSize;
 
-        float pauseStartY = vp.Height * 0.43f;
-        float pauseSpacing = _actionButtonSize.Y * 1.2f;
+        float pauseStartY = vp.Height * 0.45f;
+        float pauseSpacing = pauseButtonSize.Y * 1.2f;
         _pauseResumeButton.Position = new Vector2(centerX, pauseStartY);
         _pauseSettingsButton.Position = new Vector2(centerX, pauseStartY + pauseSpacing);
         _pauseQuitButton.Position = new Vector2(centerX, pauseStartY + pauseSpacing * 2f);
 
         float confirmY = pauseStartY + pauseSpacing * 1.5f;
-        float confirmTotalWidth = (_actionButtonSize.X * 2) + _actionButtonPadding;
-        float confirmStartX = centerX - (confirmTotalWidth / 2f) + (_actionButtonSize.X / 2f);
+        float confirmTotalWidth = (pauseButtonSize.X * 2) + _actionButtonPadding;
+        float confirmStartX = centerX - (confirmTotalWidth / 2f) + (pauseButtonSize.X / 2f);
         _pauseConfirmQuitButton.Position = new Vector2(confirmStartX, confirmY);
-        _pauseCancelQuitButton.Position = new Vector2(confirmStartX + _actionButtonSize.X + _actionButtonPadding, confirmY);
+        _pauseCancelQuitButton.Position = new Vector2(confirmStartX + pauseButtonSize.X + _actionButtonPadding, confirmY);
 
         _devMenu.HandleResize(vp.Bounds);
     }
@@ -934,9 +938,83 @@ internal class GameState : State
         _pauseQuitButton.Update(gameTime);
     }
 
+    private bool IsActionJustPressed(InputAction action)
+    {
+        return _keybinds.IsJustPressed(action, _currentKeyboardState, _previousKeyboardState);
+    }
+
+    private void HandleBettingPhaseKeybinds()
+    {
+        if (IsActionJustPressed(InputAction.Hit))
+            OnBetDownClicked(this, EventArgs.Empty);
+
+        if (IsActionJustPressed(InputAction.Double))
+            OnBetUpClicked(this, EventArgs.Empty);
+
+        if (IsActionJustPressed(InputAction.Split))
+            OnRepeatBetClicked(this, EventArgs.Empty);
+
+        if (IsActionJustPressed(InputAction.Stand))
+            OnDealClicked(this, EventArgs.Empty);
+    }
+
+    private void HandleBankruptPhaseKeybinds()
+    {
+        if (IsActionJustPressed(InputAction.Hit))
+            OnResetBankrollClicked(this, EventArgs.Empty);
+
+        if (IsActionJustPressed(InputAction.Stand) || IsActionJustPressed(InputAction.Back))
+            OnMenuClicked(this, EventArgs.Empty);
+    }
+
+    private void HandlePlayerTurnKeybinds()
+    {
+        if (IsActionJustPressed(InputAction.Hit))
+        {
+            OnHitClicked(this, EventArgs.Empty);
+            return;
+        }
+
+        if (IsActionJustPressed(InputAction.Stand))
+        {
+            OnStandClicked(this, EventArgs.Empty);
+            return;
+        }
+
+        if (IsActionJustPressed(InputAction.Split))
+        {
+            OnSplitClicked(this, EventArgs.Empty);
+            return;
+        }
+
+        if (IsActionJustPressed(InputAction.Double))
+        {
+            OnDoubleClicked(this, EventArgs.Empty);
+            return;
+        }
+
+        if (IsActionJustPressed(InputAction.Surrender))
+            OnSurrenderClicked(this, EventArgs.Empty);
+    }
+
+    private void HandleInsuranceKeybinds()
+    {
+        if (IsActionJustPressed(InputAction.Hit))
+        {
+            OnInsuranceClicked(this, EventArgs.Empty);
+            return;
+        }
+
+        if (IsActionJustPressed(InputAction.Stand) || IsActionJustPressed(InputAction.Back))
+            OnDeclineInsuranceClicked(this, EventArgs.Empty);
+    }
+
     public override void Update(GameTime gameTime)
     {
         CaptureKeyboardState();
+
+        bool pausePressed = IsActionJustPressed(InputAction.Pause);
+        bool backPressed = IsActionJustPressed(InputAction.Back);
 
         if (WasKeyJustPressed(Keys.F3))
             _showAlignmentGuides = !_showAlignmentGuides;
@@ -946,21 +1024,27 @@ internal class GameState : State
 
         if (_devMenu.IsOpen)
         {
-            _devMenu.Update(gameTime, _currentKeyboardState, _previousKeyboardState);
+            if (pausePressed || backPressed)
+                _devMenu.Close();
+            else
+                _devMenu.Update(gameTime, _currentKeyboardState, _previousKeyboardState);
             CommitKeyboardState();
             return;
         }
 
-        if (WasKeyJustPressed(Keys.Escape))
+        if (pausePressed)
         {
             if (_isQuitConfirmationVisible)
-            {
                 _isQuitConfirmationVisible = false;
-            }
             else
-            {
                 _isPaused = !_isPaused;
-            }
+        }
+        else if (backPressed)
+        {
+            if (_isQuitConfirmationVisible)
+                _isQuitConfirmationVisible = false;
+            else if (_isPaused)
+                _isPaused = false;
         }
 
         if (_isPaused)
@@ -972,6 +1056,7 @@ internal class GameState : State
 
         if (_gamePhase == GamePhase.Betting)
         {
+            HandleBettingPhaseKeybinds();
             _betDownButton.Update(gameTime);
             _betUpButton.Update(gameTime);
             _dealButton.Update(gameTime);
@@ -983,6 +1068,7 @@ internal class GameState : State
 
         if (_gamePhase == GamePhase.Bankrupt)
         {
+            HandleBankruptPhaseKeybinds();
             _resetBankrollButton.Update(gameTime);
             _menuButton.Update(gameTime);
             CommitKeyboardState();
@@ -993,12 +1079,14 @@ internal class GameState : State
 
         if (IsPlayerInteractionEnabled())
         {
+            HandlePlayerTurnKeybinds();
             LayoutActionButtons();
             foreach (var button in GetVisibleActionButtons())
                 button.Update(gameTime);
         }
         else if (IsInsuranceInteractionEnabled())
         {
+            HandleInsuranceKeybinds();
             _insuranceButton.Update(gameTime);
             _declineInsuranceButton.Update(gameTime);
         }
@@ -1008,9 +1096,16 @@ internal class GameState : State
 
         if (_waitingForRoundReset && !_tweenManager.HasActiveTweens)
         {
-            _roundCompleteTimer -= deltaSeconds;
-            if (_roundCompleteTimer <= 0f)
+            if (IsActionJustPressed(InputAction.Hit) || IsActionJustPressed(InputAction.Stand))
+            {
                 StartNewRound();
+            }
+            else
+            {
+                _roundCompleteTimer -= deltaSeconds;
+                if (_roundCompleteTimer <= 0f)
+                    StartNewRound();
+            }
         }
 
         _sceneRenderer.Update(gameTime);
@@ -1144,12 +1239,32 @@ internal class GameState : State
     private void DrawPauseOverlay(GameTime gameTime, SpriteBatch spriteBatch)
     {
         var vp = _graphicsDevice.Viewport;
-        spriteBatch.Draw(_pixelTexture, new Rectangle(0, 0, vp.Width, vp.Height), new Color(0, 0, 0, 180));
+        spriteBatch.Draw(_pixelTexture, new Rectangle(0, 0, vp.Width, vp.Height), new Color(3, 8, 4, 204));
 
-        string title = _isQuitConfirmationVisible ? "Quit to Menu?" : "Paused";
+        int panelWidth = (int)Math.Clamp(vp.Width * 0.52f, 460f, 860f);
+        int panelHeight = _isQuitConfirmationVisible
+            ? (int)Math.Clamp(vp.Height * 0.40f, 280f, 460f)
+            : (int)Math.Clamp(vp.Height * 0.58f, 360f, 720f);
+        int panelX = vp.Width / 2 - panelWidth / 2;
+        int panelY = (int)(vp.Height * 0.16f);
+        var panelRect = new Rectangle(panelX, panelY, panelWidth, panelHeight);
+
+        spriteBatch.Draw(_pixelTexture, panelRect, new Color(12, 48, 24, 242));
+        var headerRect = new Rectangle(panelRect.X, panelRect.Y, panelRect.Width, Math.Clamp((int)(panelRect.Height * 0.16f), 48, 92));
+        spriteBatch.Draw(_pixelTexture, headerRect, new Color(23, 78, 37, 255));
+
+        const int borderThickness = 3;
+        spriteBatch.Draw(_pixelTexture, new Rectangle(panelRect.X, panelRect.Y, panelRect.Width, borderThickness), Color.Gold);
+        spriteBatch.Draw(_pixelTexture, new Rectangle(panelRect.X, panelRect.Bottom - borderThickness, panelRect.Width, borderThickness), Color.Gold);
+        spriteBatch.Draw(_pixelTexture, new Rectangle(panelRect.X, panelRect.Y, borderThickness, panelRect.Height), Color.Gold);
+        spriteBatch.Draw(_pixelTexture, new Rectangle(panelRect.Right - borderThickness, panelRect.Y, borderThickness, panelRect.Height), Color.Gold);
+
+        string title = _isQuitConfirmationVisible ? "Leave This Round?" : "Round Paused";
         float titleScale = GetResponsiveScale(1.1f);
         var titleSize = _font.MeasureString(title) * titleScale;
-        var titlePos = new Vector2(vp.Width / 2f - titleSize.X / 2f, vp.Height * 0.28f);
+        var titlePos = new Vector2(
+            headerRect.Center.X - titleSize.X / 2f,
+            headerRect.Center.Y - titleSize.Y / 2f);
         spriteBatch.DrawString(_font, title, titlePos, Color.White, 0f, Vector2.Zero, titleScale, SpriteEffects.None, 0f);
 
         if (_isQuitConfirmationVisible)
@@ -1157,13 +1272,31 @@ internal class GameState : State
             const string warning = "Current round progress will be lost.";
             float warningScale = GetResponsiveScale(0.6f);
             var warningSize = _font.MeasureString(warning) * warningScale;
-            var warningPos = new Vector2(vp.Width / 2f - warningSize.X / 2f, titlePos.Y + titleSize.Y + 14f);
+            var warningPos = new Vector2(vp.Width / 2f - warningSize.X / 2f, headerRect.Bottom + panelRect.Height * 0.12f);
             spriteBatch.DrawString(_font, warning, warningPos, Color.LightGray, 0f, Vector2.Zero, warningScale, SpriteEffects.None, 0f);
+
+            var hint = $"{_keybinds.GetLabel(InputAction.Pause)} closes this prompt";
+            var hintScale = GetResponsiveScale(0.56f);
+            var hintSize = _font.MeasureString(hint) * hintScale;
+            var hintPos = new Vector2(vp.Width / 2f - hintSize.X / 2f, warningPos.Y + warningSize.Y + 10f);
+            spriteBatch.DrawString(_font, hint, hintPos, Color.LightGray, 0f, Vector2.Zero, hintScale, SpriteEffects.None, 0f);
 
             _pauseConfirmQuitButton.Draw(gameTime, spriteBatch);
             _pauseCancelQuitButton.Draw(gameTime, spriteBatch);
             return;
         }
+
+        var menuHint = $"{_keybinds.GetLabel(InputAction.Pause)} closes this menu";
+        float menuHintScale = GetResponsiveScale(0.56f);
+        var menuHintSize = _font.MeasureString(menuHint) * menuHintScale;
+        var menuHintPos = new Vector2(vp.Width / 2f - menuHintSize.X / 2f, headerRect.Bottom + panelRect.Height * 0.08f);
+        spriteBatch.DrawString(_font, menuHint, menuHintPos, Color.LightGray, 0f, Vector2.Zero, menuHintScale, SpriteEffects.None, 0f);
+
+        const string menuSubtext = "Use buttons for Settings or Quit to Menu.";
+        float subtextScale = GetResponsiveScale(0.5f);
+        var subtextSize = _font.MeasureString(menuSubtext) * subtextScale;
+        var subtextPos = new Vector2(vp.Width / 2f - subtextSize.X / 2f, menuHintPos.Y + menuHintSize.Y + 8f);
+        spriteBatch.DrawString(_font, menuSubtext, subtextPos, Color.LightGray, 0f, Vector2.Zero, subtextScale, SpriteEffects.None, 0f);
 
         _pauseResumeButton.Draw(gameTime, spriteBatch);
         _pauseSettingsButton.Draw(gameTime, spriteBatch);
@@ -1351,7 +1484,7 @@ internal class GameState : State
 
     public override void HandleResize(Rectangle vp)
     {
-        ReloadAssistanceSettings();
+        ReloadPlayerSettings();
         CalculatePositions();
         _sceneRenderer.HandleResize(vp);
 
@@ -1386,10 +1519,11 @@ internal class GameState : State
         _uiLayer.Clear();
     }
 
-    private void ReloadAssistanceSettings()
+    private void ReloadPlayerSettings()
     {
         var settings = _game.SettingsRepository.LoadSettings(_profileId);
         _showHandValues = ResolveShowHandValues(settings);
+        _keybinds = KeybindMap.FromSettings(settings);
     }
 
     internal static GameRules ApplySelectedMode(GameRules rules, BetFlowMode mode)

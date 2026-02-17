@@ -111,7 +111,7 @@ internal sealed class DevMenuOverlay
             _tools[i].Draw(gameTime, spriteBatch, font, toolBounds, textScale * 0.72f);
         }
 
-        var closeHelp = "F1: close";
+        var closeHelp = "F1 or Pause/Back: close";
         var closeScale = textScale * 0.65f;
         var closeSize = font.MeasureString(closeHelp) * closeScale;
         spriteBatch.DrawString(

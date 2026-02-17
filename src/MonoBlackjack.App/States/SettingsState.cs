@@ -1,6 +1,7 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Content;
 using Microsoft.Xna.Framework.Graphics;
+using Microsoft.Xna.Framework.Input;
 using MonoBlackjack.Core;
 using MonoBlackjack.Core.Ports;
 
@@ -15,16 +16,6 @@ internal sealed class SettingsState : State
         Graphics,
         Assistance
     }
-
-    private const string SettingKeybindHit = "KeybindHit";
-    private const string SettingKeybindStand = "KeybindStand";
-    private const string SettingKeybindDouble = "KeybindDouble";
-    private const string SettingKeybindSplit = "KeybindSplit";
-    private const string SettingKeybindSurrender = "KeybindSurrender";
-    private const string SettingKeybindPause = "KeybindPause";
-    private const string SettingGraphicsBackground = "GraphicsBackgroundColor";
-    private const string SettingGraphicsFontScale = "GraphicsFontScale";
-    private const string SettingGraphicsCardBack = "GraphicsCardBack";
 
     private readonly ISettingsRepository _settingsRepository;
     private readonly int _profileId;
@@ -41,11 +32,13 @@ internal sealed class SettingsState : State
     private readonly Button _graphicsTab;
     private readonly Button _assistanceTab;
     private readonly Button _saveButton;
+    private readonly Button _resetDefaultsButton;
     private readonly Button _backButton;
 
     private SettingsSection _activeSection = SettingsSection.Rules;
     private string _statusMessage = string.Empty;
     private float _statusSeconds;
+    private string? _capturingKeybindKey;
 
     public SettingsState(
         BlackjackGame game,
@@ -81,9 +74,12 @@ internal sealed class SettingsState : State
         _saveButton = new Button(_buttonTexture, _font) { Text = "Save", PenColor = Color.Black };
         _saveButton.Click += OnSaveClicked;
 
+        _resetDefaultsButton = new Button(_buttonTexture, _font) { Text = "Defaults", PenColor = Color.Black };
+        _resetDefaultsButton.Click += OnResetDefaultsClicked;
+
         _backButton = new Button(_buttonTexture, _font) { Text = "Back", PenColor = Color.Black };
         _backButton.Click += OnBackClicked;
-        _actionButtons.AddRange([_saveButton, _backButton]);
+        _actionButtons.AddRange([_saveButton, _resetDefaultsButton, _backButton]);
 
         InitializeRows();
         UpdateLayout();
@@ -99,8 +95,11 @@ internal sealed class SettingsState : State
         var rowScale = GetResponsiveScale(0.85f);
         foreach (var row in GetVisibleRows())
         {
+            bool isCapturing = string.Equals(_capturingKeybindKey, row.Key, StringComparison.OrdinalIgnoreCase);
+            var valueText = isCapturing ? "Press a key..." : row.SelectedLabel;
+            var valueColor = isCapturing ? Color.Yellow : Color.Gold;
             spriteBatch.DrawString(_font, row.Label, row.LabelPosition, Color.White, 0f, Vector2.Zero, rowScale, SpriteEffects.None, 0f);
-            spriteBatch.DrawString(_font, row.SelectedLabel, row.ValuePosition, Color.Gold, 0f, Vector2.Zero, rowScale, SpriteEffects.None, 0f);
+            spriteBatch.DrawString(_font, valueText, row.ValuePosition, valueColor, 0f, Vector2.Zero, rowScale, SpriteEffects.None, 0f);
             row.PreviousButton.Draw(gameTime, spriteBatch);
             row.NextButton.Draw(gameTime, spriteBatch);
         }
@@ -122,6 +121,19 @@ internal sealed class SettingsState : State
 
     public override void Update(GameTime gameTime)
     {
+        CaptureKeyboardState();
+
+        if (_capturingKeybindKey is not null)
+        {
+            TryCaptureKeybindInput();
+        }
+        else if (WasBackKeyPressed())
+        {
+            _game.GoBack();
+            CommitKeyboardState();
+            return;
+        }
+
         foreach (var button in _tabButtons)
             button.Update(gameTime);
 
@@ -140,6 +152,8 @@ internal sealed class SettingsState : State
             if (_statusSeconds <= 0f)
                 _statusMessage = string.Empty;
         }
+
+        CommitKeyboardState();
     }
 
     public override void PostUpdate(GameTime gameTime) { }
@@ -154,6 +168,7 @@ internal sealed class SettingsState : State
         var button = new Button(_buttonTexture, _font) { Text = text, PenColor = Color.Black };
         button.Click += (_, _) =>
         {
+            CancelKeybindCapture();
             _activeSection = section;
             _statusMessage = string.Empty;
         };
@@ -166,8 +181,8 @@ internal sealed class SettingsState : State
         var subtitle = _activeSection switch
         {
             SettingsSection.Rules => "Casino Rules",
-            SettingsSection.Keybinds => "Keyboard Controls (Planned)",
-            SettingsSection.Graphics => "Visual Options (Planned)",
+            SettingsSection.Keybinds => "Keyboard Controls",
+            SettingsSection.Graphics => "Visual Options",
             SettingsSection.Assistance => "Gameplay Assistance",
             _ => string.Empty
         };
@@ -308,56 +323,69 @@ internal sealed class SettingsState : State
 
         AddRow(
             SettingsSection.Keybinds,
-            SettingKeybindHit,
+            GameConfig.SettingKeybindHit,
             "Hit Action",
             [new SettingChoice("H", "H"), new SettingChoice("Space", "Space")],
-            current);
+            current,
+            isKeybind: true);
         AddRow(
             SettingsSection.Keybinds,
-            SettingKeybindStand,
+            GameConfig.SettingKeybindStand,
             "Stand Action",
             [new SettingChoice("S", "S"), new SettingChoice("Enter", "Enter")],
-            current);
+            current,
+            isKeybind: true);
         AddRow(
             SettingsSection.Keybinds,
-            SettingKeybindDouble,
+            GameConfig.SettingKeybindDouble,
             "Double Action",
             [new SettingChoice("D", "D"), new SettingChoice("Shift+D", "Shift+D")],
-            current);
+            current,
+            isKeybind: true);
         AddRow(
             SettingsSection.Keybinds,
-            SettingKeybindSplit,
+            GameConfig.SettingKeybindSplit,
             "Split Action",
             [new SettingChoice("P", "P"), new SettingChoice("Shift+S", "Shift+S")],
-            current);
+            current,
+            isKeybind: true);
         AddRow(
             SettingsSection.Keybinds,
-            SettingKeybindSurrender,
+            GameConfig.SettingKeybindSurrender,
             "Surrender Action",
             [new SettingChoice("R", "R"), new SettingChoice("Shift+R", "Shift+R")],
-            current);
+            current,
+            isKeybind: true);
         AddRow(
             SettingsSection.Keybinds,
-            SettingKeybindPause,
+            GameConfig.SettingKeybindPause,
             "Pause Action",
             [new SettingChoice("Escape", "Escape"), new SettingChoice("P", "P")],
-            current);
+            current,
+            isKeybind: true);
+        AddRow(
+            SettingsSection.Keybinds,
+            GameConfig.SettingKeybindBack,
+            "Back Action",
+            [new SettingChoice("Escape", "Escape"), new SettingChoice("Backspace", "Back")],
+            current,
+            isKeybind: true);
 
         AddRow(
             SettingsSection.Graphics,
-            SettingGraphicsBackground,
+            GameConfig.SettingGraphicsBackgroundColor,
             "Background Color",
             [new SettingChoice("Green", "Green"), new SettingChoice("Blue", "Blue"), new SettingChoice("Red", "Red")],
             current);
         AddRow(
             SettingsSection.Graphics,
-            SettingGraphicsFontScale,
+            GameConfig.SettingGraphicsFontScale,
             "Font Scale",
             [new SettingChoice("0.9x", "0.9"), new SettingChoice("1.0x", "1.0"), new SettingChoice("1.2x", "1.2")],
             current);
         AddRow(
             SettingsSection.Graphics,
-            SettingGraphicsCardBack,
+            GameConfig.SettingGraphicsCardBack,
             "Card Back",
             [new SettingChoice("Classic", "Classic"), new SettingChoice("Blue", "Blue"), new SettingChoice("Red", "Red")],
             current);
@@ -378,33 +406,23 @@ internal sealed class SettingsState : State
 
     private Dictionary<string, string> BuildCurrentSettings()
     {
-        var current = new Dictionary<string, string>(_game.CurrentRules.ToSettingsDictionary(), StringComparer.OrdinalIgnoreCase);
-        SetLoadedOrDefault(current, SettingKeybindHit, "H");
-        SetLoadedOrDefault(current, SettingKeybindStand, "S");
-        SetLoadedOrDefault(current, SettingKeybindDouble, "D");
-        SetLoadedOrDefault(current, SettingKeybindSplit, "P");
-        SetLoadedOrDefault(current, SettingKeybindSurrender, "R");
-        SetLoadedOrDefault(current, SettingKeybindPause, "Escape");
+        var current = new Dictionary<string, string>(
+            SettingsContract.GetDefaultSettings(),
+            StringComparer.OrdinalIgnoreCase);
 
-        SetLoadedOrDefault(current, SettingGraphicsBackground, "Green");
-        SetLoadedOrDefault(current, SettingGraphicsFontScale, "1.0");
-        SetLoadedOrDefault(current, SettingGraphicsCardBack, "Classic");
-
-        SetLoadedOrDefault(current, GameConfig.SettingShowHandValues, "True");
-        SetLoadedOrDefault(current, GameConfig.SettingShowRecommendations, "False");
-
-        return current;
-    }
-
-    private void SetLoadedOrDefault(Dictionary<string, string> settings, string key, string defaultValue)
-    {
-        if (_loadedSettings.TryGetValue(key, out var value))
+        foreach (var kvp in _game.CurrentRules.ToSettingsDictionary())
         {
-            settings[key] = value;
-            return;
+            if (SettingsContract.TryNormalize(kvp.Key, kvp.Value, out var normalized))
+                current[kvp.Key] = normalized;
         }
 
-        settings[key] = defaultValue;
+        foreach (var kvp in _loadedSettings)
+        {
+            if (SettingsContract.TryNormalize(kvp.Key, kvp.Value, out var normalized))
+                current[kvp.Key] = normalized;
+        }
+
+        return current;
     }
 
     private void AddRow(
@@ -412,26 +430,53 @@ internal sealed class SettingsState : State
         string key,
         string label,
         IReadOnlyList<SettingChoice> choices,
-        IReadOnlyDictionary<string, string> current)
+        IReadOnlyDictionary<string, string> current,
+        bool isKeybind = false)
     {
+        var choiceList = choices.ToList();
         int selectedIndex = 0;
         if (current.TryGetValue(key, out var value))
         {
-            for (int i = 0; i < choices.Count; i++)
+            for (int i = 0; i < choiceList.Count; i++)
             {
-                if (string.Equals(choices[i].Value, value, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(choiceList[i].Value, value, StringComparison.OrdinalIgnoreCase))
                 {
                     selectedIndex = i;
                     break;
                 }
             }
+
+            if (selectedIndex == 0
+                && choiceList.Count > 0
+                && !string.Equals(choiceList[0].Value, value, StringComparison.OrdinalIgnoreCase))
+            {
+                var dynamicLabel = isKeybind ? ResolveKeybindLabel(value) : value;
+                choiceList.Add(new SettingChoice(dynamicLabel, value));
+                selectedIndex = choiceList.Count - 1;
+            }
         }
 
-        var row = new SettingRow(section, key, label, choices.ToList(), selectedIndex);
-        row.PreviousButton = new Button(_buttonTexture, _font) { Text = "<", PenColor = Color.Black };
-        row.NextButton = new Button(_buttonTexture, _font) { Text = ">", PenColor = Color.Black };
-        row.PreviousButton.Click += (_, _) => ShiftRow(row, -1);
-        row.NextButton.Click += (_, _) => ShiftRow(row, 1);
+        var row = new SettingRow(section, key, label, choiceList, selectedIndex, isKeybind);
+        row.PreviousButton = new Button(_buttonTexture, _font) { Text = isKeybind ? "Bind" : "<", PenColor = Color.Black };
+        row.NextButton = new Button(_buttonTexture, _font) { Text = isKeybind ? "Default" : ">", PenColor = Color.Black };
+
+        if (isKeybind)
+        {
+            row.PreviousButton.Click += (_, _) => BeginKeybindCapture(row);
+            row.NextButton.Click += (_, _) =>
+            {
+                CancelKeybindCapture();
+                SetRowToDefault(row);
+                _statusMessage = $"{row.Label} reset to default";
+                _statusSeconds = 1.8f;
+            };
+        }
+        else
+        {
+            row.PreviousButton.Click += (_, _) => ShiftRow(row, -1);
+            row.NextButton.Click += (_, _) => ShiftRow(row, 1);
+        }
+
         _rows.Add(row);
     }
 
@@ -473,10 +518,13 @@ internal sealed class SettingsState : State
         float labelX = vp.Width * 0.10f;
         float valueX = vp.Width * 0.50f;
         float prevX = vp.Width * 0.72f;
-        float nextX = vp.Width * 0.80f;
+        float nextX = vp.Width * 0.81f;
         var navButtonSize = new Vector2(
             Math.Clamp(vp.Width * 0.055f, 58f, 90f),
             Math.Clamp(vp.Height * 0.048f, 30f, 44f));
+        var keybindButtonSize = new Vector2(
+            Math.Clamp(vp.Width * 0.095f, 96f, 155f),
+            navButtonSize.Y);
 
         var sectionRowIndices = new Dictionary<SettingsSection, int>
         {
@@ -494,28 +542,37 @@ internal sealed class SettingsState : State
 
             row.LabelPosition = new Vector2(labelX, y);
             row.ValuePosition = new Vector2(valueX, y);
-            row.PreviousButton.Size = navButtonSize;
-            row.PreviousButton.Position = new Vector2(prevX, y + navButtonSize.Y * 0.25f);
-            row.NextButton.Size = navButtonSize;
-            row.NextButton.Position = new Vector2(nextX, y + navButtonSize.Y * 0.25f);
+
+            var rowButtonSize = row.IsKeybind ? keybindButtonSize : navButtonSize;
+            row.PreviousButton.Size = rowButtonSize;
+            row.PreviousButton.Position = new Vector2(prevX, y + rowButtonSize.Y * 0.25f);
+            row.NextButton.Size = rowButtonSize;
+            row.NextButton.Position = new Vector2(nextX, y + rowButtonSize.Y * 0.25f);
         }
 
         var actionButtonSize = new Vector2(
-            Math.Clamp(vp.Width * 0.16f, 150f, 260f),
+            Math.Clamp(vp.Width * 0.145f, 130f, 230f),
             Math.Clamp(vp.Height * 0.065f, 38f, 56f));
         float actionY = vp.Height - actionButtonSize.Y * 1.4f;
         float centerX = vp.Width / 2f;
-        float offset = actionButtonSize.X * 0.62f;
+        float spacing = actionButtonSize.X * 0.24f;
+        float totalWidth = actionButtonSize.X * _actionButtons.Count + spacing * (_actionButtons.Count - 1);
+        float startX = centerX - totalWidth / 2f + actionButtonSize.X / 2f;
 
-        _saveButton.Size = actionButtonSize;
-        _saveButton.Position = new Vector2(centerX - offset, actionY);
-
-        _backButton.Size = actionButtonSize;
-        _backButton.Position = new Vector2(centerX + offset, actionY);
+        for (int i = 0; i < _actionButtons.Count; i++)
+        {
+            var button = _actionButtons[i];
+            button.Size = actionButtonSize;
+            button.Position = new Vector2(startX + i * (actionButtonSize.X + spacing), actionY);
+        }
     }
 
     private void ShiftRow(SettingRow row, int direction)
     {
+        if (row.IsKeybind)
+            return;
+
+        CancelKeybindCapture();
         int count = row.Choices.Count;
         int next = row.SelectedIndex + direction;
         if (next < 0)
@@ -529,7 +586,16 @@ internal sealed class SettingsState : State
 
     private void OnSaveClicked(object? sender, EventArgs e)
     {
+        CancelKeybindCapture();
         var settings = BuildSavedSettings(GetSelectedSettings());
+        var conflicts = FindKeybindConflicts(settings);
+        if (conflicts.Count > 0)
+        {
+            var first = conflicts[0];
+            _statusMessage = $"Duplicate keybind: {first.Binding}";
+            _statusSeconds = 2.5f;
+            return;
+        }
 
         var newRules = GameRules.FromSettings(settings);
         _game.UpdateRules(newRules);
@@ -543,9 +609,205 @@ internal sealed class SettingsState : State
         _statusSeconds = 2.0f;
     }
 
+    private void OnResetDefaultsClicked(object? sender, EventArgs e)
+    {
+        CancelKeybindCapture();
+        foreach (var row in _rows)
+        {
+            SetRowToDefault(row);
+        }
+
+        _statusMessage = "Defaults restored (save to apply)";
+        _statusSeconds = 2.5f;
+    }
+
+    private static void SetRowToDefault(SettingRow row)
+    {
+        if (!SettingsContract.TryGetDefaultValue(row.Key, out var defaultValue))
+            return;
+
+        for (int i = 0; i < row.Choices.Count; i++)
+        {
+            if (!string.Equals(row.Choices[i].Value, defaultValue, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            row.SelectedIndex = i;
+            return;
+        }
+
+        var defaultLabel = row.IsKeybind ? ResolveKeybindLabel(defaultValue) : defaultValue;
+        row.Choices.Add(new SettingChoice(defaultLabel, defaultValue));
+        row.SelectedIndex = row.Choices.Count - 1;
+    }
+
     internal static Dictionary<string, string> BuildSavedSettings(IReadOnlyDictionary<string, string> selectedSettings)
     {
-        return new Dictionary<string, string>(selectedSettings, StringComparer.OrdinalIgnoreCase);
+        var sanitized = SettingsContract.Sanitize(selectedSettings);
+        return new Dictionary<string, string>(sanitized, StringComparer.OrdinalIgnoreCase);
+    }
+
+    internal static IReadOnlyList<KeybindConflict> FindKeybindConflicts(IReadOnlyDictionary<string, string> settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        var seen = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var conflicts = new List<KeybindConflict>();
+
+        foreach (var keybindKey in SettingsContract.KeybindSettingKeys)
+        {
+            if (!settings.TryGetValue(keybindKey, out var value))
+                continue;
+            if (!SettingsContract.TryNormalize(keybindKey, value, out var normalized))
+                continue;
+
+            if (seen.TryGetValue(normalized, out var firstKey))
+            {
+                if (IsAllowedDuplicatePair(firstKey, keybindKey))
+                    continue;
+
+                conflicts.Add(new KeybindConflict(firstKey, keybindKey, normalized));
+                continue;
+            }
+
+            seen[normalized] = keybindKey;
+        }
+
+        return conflicts;
+    }
+
+    private static bool IsAllowedDuplicatePair(string firstKey, string duplicateKey)
+    {
+        return (string.Equals(firstKey, GameConfig.SettingKeybindPause, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(duplicateKey, GameConfig.SettingKeybindBack, StringComparison.OrdinalIgnoreCase))
+            || (string.Equals(firstKey, GameConfig.SettingKeybindBack, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(duplicateKey, GameConfig.SettingKeybindPause, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string ResolveKeybindLabel(string bindingValue)
+    {
+        return string.Equals(bindingValue, "Back", StringComparison.OrdinalIgnoreCase)
+            ? "Backspace"
+            : bindingValue;
+    }
+
+    private void BeginKeybindCapture(SettingRow row)
+    {
+        if (string.Equals(_capturingKeybindKey, row.Key, StringComparison.OrdinalIgnoreCase))
+        {
+            CancelKeybindCapture();
+            _statusMessage = "Key capture canceled";
+            _statusSeconds = 1.2f;
+            return;
+        }
+
+        _capturingKeybindKey = row.Key;
+        _statusMessage = $"Press a key for {row.Label}";
+        _statusSeconds = 0f;
+    }
+
+    private void CancelKeybindCapture()
+    {
+        _capturingKeybindKey = null;
+    }
+
+    private void TryCaptureKeybindInput()
+    {
+        if (_capturingKeybindKey is null)
+            return;
+
+        if (!TryGetFirstJustPressedNonModifierKey(out var pressedKey))
+            return;
+
+        var row = _rows.FirstOrDefault(x =>
+            x.IsKeybind && string.Equals(x.Key, _capturingKeybindKey, StringComparison.OrdinalIgnoreCase));
+        if (row is null)
+        {
+            CancelKeybindCapture();
+            return;
+        }
+
+        if (!TryResolveCapturedBinding(row.Key, pressedKey, out var normalizedBinding))
+        {
+            _statusMessage = $"Unsupported key for {row.Label}";
+            _statusSeconds = 2.5f;
+            CancelKeybindCapture();
+            return;
+        }
+
+        int selectedIndex = row.Choices.FindIndex(choice =>
+            string.Equals(choice.Value, normalizedBinding, StringComparison.OrdinalIgnoreCase));
+        if (selectedIndex < 0)
+        {
+            row.Choices.Add(new SettingChoice(ResolveKeybindLabel(normalizedBinding), normalizedBinding));
+            selectedIndex = row.Choices.Count - 1;
+        }
+
+        row.SelectedIndex = selectedIndex;
+        _statusMessage = $"{row.Label} set to {row.SelectedLabel}";
+        _statusSeconds = 2.0f;
+        CancelKeybindCapture();
+    }
+
+    private bool TryResolveCapturedBinding(string settingKey, Keys pressedKey, out string normalizedBinding)
+    {
+        normalizedBinding = string.Empty;
+
+        var token = pressedKey switch
+        {
+            Keys.Back => "Back",
+            _ => pressedKey.ToString()
+        };
+
+        if (IsShiftDown(_currentKeyboardState))
+        {
+            var shiftedToken = $"Shift+{token}";
+            if (SettingsContract.TryNormalize(settingKey, shiftedToken, out normalizedBinding))
+                return true;
+        }
+
+        return SettingsContract.TryNormalize(settingKey, token, out normalizedBinding);
+    }
+
+    private bool TryGetFirstJustPressedNonModifierKey(out Keys key)
+    {
+        key = Keys.None;
+
+        var currentlyPressed = _currentKeyboardState.GetPressedKeys();
+        Array.Sort(currentlyPressed);
+        for (int i = 0; i < currentlyPressed.Length; i++)
+        {
+            var candidate = currentlyPressed[i];
+            if (_previousKeyboardState.IsKeyDown(candidate))
+                continue;
+            if (IsModifierKey(candidate))
+                continue;
+
+            key = candidate;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsModifierKey(Keys key)
+    {
+        return key is Keys.LeftShift
+            or Keys.RightShift
+            or Keys.LeftControl
+            or Keys.RightControl
+            or Keys.LeftAlt
+            or Keys.RightAlt;
+    }
+
+    private static bool IsShiftDown(KeyboardState keyboardState)
+    {
+        return keyboardState.IsKeyDown(Keys.LeftShift) || keyboardState.IsKeyDown(Keys.RightShift);
+    }
+
+    private bool WasBackKeyPressed()
+    {
+        var keybinds = KeybindMap.FromSettings(GetSelectedSettings());
+        return keybinds.IsJustPressed(InputAction.Back, _currentKeyboardState, _previousKeyboardState);
     }
 
     private Dictionary<string, string> GetSelectedSettings()
@@ -558,8 +820,11 @@ internal sealed class SettingsState : State
 
     private void OnBackClicked(object? sender, EventArgs e)
     {
+        CancelKeybindCapture();
         _game.GoBack();
     }
+
+    internal readonly record struct KeybindConflict(string ExistingKey, string DuplicateKey, string Binding);
 
     private sealed record SettingChoice(string Label, string Value);
 
@@ -568,6 +833,7 @@ internal sealed class SettingsState : State
         public SettingsSection Section { get; }
         public string Key { get; }
         public string Label { get; }
+        public bool IsKeybind { get; }
         public List<SettingChoice> Choices { get; }
         public int SelectedIndex { get; set; }
         public Vector2 LabelPosition { get; set; }
@@ -577,11 +843,12 @@ internal sealed class SettingsState : State
         public string SelectedValue => Choices[SelectedIndex].Value;
         public string SelectedLabel => Choices[SelectedIndex].Label;
 
-        public SettingRow(SettingsSection section, string key, string label, List<SettingChoice> choices, int selectedIndex)
+        public SettingRow(SettingsSection section, string key, string label, List<SettingChoice> choices, int selectedIndex, bool isKeybind)
         {
             Section = section;
             Key = key;
             Label = label;
+            IsKeybind = isKeybind;
             Choices = choices;
             SelectedIndex = selectedIndex;
         }

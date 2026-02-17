@@ -65,4 +65,45 @@ public class GameConfigTests
         settings.Keys.Should().Contain(GameConfig.SettingPenetrationPercent);
         settings.Keys.Should().NotContain("BetFlow");
     }
+
+    [Fact]
+    public void SettingsContract_Sanitize_DropsUnsupportedAndInvalidValues()
+    {
+        var input = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [GameConfig.SettingShowHandValues] = "false",
+            [GameConfig.SettingNumberOfDecks] = "999",
+            [GameConfig.SettingKeybindStand] = "h",
+            [GameConfig.SettingKeybindPause] = "escape",
+            ["LegacySetting"] = "on"
+        };
+
+        var sanitized = SettingsContract.Sanitize(input);
+
+        sanitized.Should().ContainKey(GameConfig.SettingShowHandValues);
+        sanitized[GameConfig.SettingShowHandValues].Should().Be("False");
+        sanitized.Should().ContainKey(GameConfig.SettingKeybindStand);
+        sanitized[GameConfig.SettingKeybindStand].Should().Be("H");
+        sanitized.Should().ContainKey(GameConfig.SettingKeybindPause);
+        sanitized[GameConfig.SettingKeybindPause].Should().Be("Escape");
+        sanitized.Should().NotContainKey(GameConfig.SettingNumberOfDecks);
+        sanitized.Should().NotContainKey("LegacySetting");
+    }
+
+    [Fact]
+    public void SettingsContract_MergeWithDefaults_UsesDefaultsForMissingValues()
+    {
+        var merged = SettingsContract.MergeWithDefaults(new Dictionary<string, string>());
+
+        merged.Should().ContainKey(GameConfig.SettingKeybindHit);
+        merged[GameConfig.SettingKeybindHit].Should().Be("H");
+        merged.Should().ContainKey(GameConfig.SettingKeybindPause);
+        merged[GameConfig.SettingKeybindPause].Should().Be("Escape");
+        merged.Should().ContainKey(GameConfig.SettingKeybindBack);
+        merged[GameConfig.SettingKeybindBack].Should().Be("Escape");
+        merged.Should().ContainKey(GameConfig.SettingShowHandValues);
+        merged[GameConfig.SettingShowHandValues].Should().Be("True");
+        merged.Should().ContainKey(GameConfig.SettingNumberOfDecks);
+        merged[GameConfig.SettingNumberOfDecks].Should().Be("6");
+    }
 }

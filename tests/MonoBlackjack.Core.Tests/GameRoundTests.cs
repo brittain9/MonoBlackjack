@@ -206,6 +206,84 @@ public class GameRoundTests
     }
 
     [Fact]
+    public void FreePlay_SplitAndDoubleDown_AreAvailableWhenHandStateAllows()
+    {
+        var rules = GameRules.Standard with
+        {
+            BetFlow = BetFlowMode.FreePlay,
+            NumberOfDecks = 6,
+            StartingBank = 10000m,
+            DoubleAfterSplit = true
+        };
+
+        for (int seed = 0; seed < 10000; seed++)
+        {
+            _events.Clear();
+            var shoe = new Shoe(rules.NumberOfDecks, rules.PenetrationPercent, rules.UseCryptographicShuffle, new Random(seed));
+            var player = new Human("Player", rules.StartingBank);
+            var dealer = new Dealer(rules.DealerHitsSoft17);
+            var round = new GameRound(shoe, player, dealer, rules, e => _events.Add(e));
+
+            round.PlaceBet(0m);
+            round.Deal();
+
+            if (round.Phase != RoundPhase.PlayerTurn)
+                continue;
+
+            var hand = player.Hands[0];
+            if (hand.Cards[0].Rank != hand.Cards[1].Rank || hand.Cards[0].Rank == Rank.Ace)
+                continue;
+
+            round.CanSplit().Should().BeTrue();
+            round.PlayerSplit();
+
+            round.Phase.Should().Be(RoundPhase.PlayerTurn);
+            round.CanDoubleDown().Should().BeTrue();
+            return;
+        }
+
+        throw new InvalidOperationException("Could not find a splittable freeplay hand.");
+    }
+
+    [Fact]
+    public void FreePlay_DoubleDown_UsesOneCardSemantics()
+    {
+        var rules = GameRules.Standard with
+        {
+            BetFlow = BetFlowMode.FreePlay,
+            NumberOfDecks = 1,
+            StartingBank = 10000m,
+            DoubleDownRestriction = DoubleDownRestriction.AnyTwoCards
+        };
+
+        for (int seed = 0; seed < 5000; seed++)
+        {
+            _events.Clear();
+            var shoe = new Shoe(rules.NumberOfDecks, rules.PenetrationPercent, rules.UseCryptographicShuffle, new Random(seed));
+            var player = new Human("Player", rules.StartingBank);
+            var dealer = new Dealer(rules.DealerHitsSoft17);
+            var round = new GameRound(shoe, player, dealer, rules, e => _events.Add(e));
+
+            round.PlaceBet(0m);
+            round.Deal();
+
+            if (round.Phase != RoundPhase.PlayerTurn || !round.CanDoubleDown())
+                continue;
+
+            int cardCountBefore = player.Hands[0].Cards.Count;
+            round.PlayerDoubleDown();
+            int cardCountAfter = player.Hands[0].Cards.Count;
+
+            _events.OfType<PlayerDoubledDown>().Should().ContainSingle();
+            cardCountAfter.Should().Be(cardCountBefore + 1);
+            round.Phase.Should().Be(RoundPhase.Complete);
+            return;
+        }
+
+        throw new InvalidOperationException("Could not find a freeplay hand that allows double down.");
+    }
+
+    [Fact]
     public void PlayerHit_DrawsCardAndPublishesEvent()
     {
         var round = CreateRound();

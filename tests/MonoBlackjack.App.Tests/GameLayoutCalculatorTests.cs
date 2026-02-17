@@ -520,4 +520,52 @@ public class GameLayoutCalculatorTests
             Assert.InRange(step, dealerStep - 0.001f, dealerStep + 0.001f);
         }
     }
+
+    [Theory]
+    [InlineData(800, 600, 6, 6)]
+    [InlineData(1280, 720, 7, 6)]
+    [InlineData(1920, 1080, 8, 8)]
+    public void ComputeAdaptiveMultiHandCardCenter_ForTwoHandsWithManyCards_DoesNotOverlapBetweenHands(
+        int viewportWidth,
+        int viewportHeight,
+        int firstHandCount,
+        int secondHandCount)
+    {
+        var cardSize = GameLayoutCalculator.CalculateCardSize(viewportHeight);
+        var centerY = GameLayoutCalculator.CalculatePlayerCardsY(viewportHeight) + cardSize.Y / 2f;
+        var counts = new[] { firstHandCount, secondHandCount };
+        const int activeHand = 0;
+
+        float firstRight = float.MinValue;
+        for (int card = 0; card < firstHandCount; card++)
+        {
+            var center = GameLayoutCalculator.ComputeAdaptiveMultiHandCardCenter(
+                viewportWidth,
+                cardSize,
+                counts,
+                handIndex: 0,
+                cardIndexInHand: card,
+                centerY,
+                activeHandIndex: activeHand);
+            firstRight = Math.Max(firstRight, center.X + cardSize.X / 2f);
+        }
+
+        float secondLeft = float.MaxValue;
+        for (int card = 0; card < secondHandCount; card++)
+        {
+            var center = GameLayoutCalculator.ComputeAdaptiveMultiHandCardCenter(
+                viewportWidth,
+                cardSize,
+                counts,
+                handIndex: 1,
+                cardIndexInHand: card,
+                centerY,
+                activeHandIndex: activeHand);
+            secondLeft = Math.Min(secondLeft, center.X - cardSize.X / 2f);
+        }
+
+        Assert.True(
+            secondLeft >= firstRight - 0.001f,
+            $"Expected adaptive split layout to avoid overlap for {viewportWidth}x{viewportHeight}: firstRight={firstRight}, secondLeft={secondLeft}");
+    }
 }

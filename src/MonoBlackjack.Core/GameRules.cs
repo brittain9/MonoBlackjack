@@ -82,7 +82,7 @@ public sealed record GameRules
     public decimal MaximumBet { get; init; }
 
     /// <summary>
-    /// Betting flow mode. Betting = manual bet selection, FreePlay = auto-deal with no bankroll.
+    /// Betting flow mode. Betting = manual bet selection, FreePlay = auto-deal with no bankroll (Freeplay UI label).
     /// </summary>
     public BetFlowMode BetFlow { get; init; }
 

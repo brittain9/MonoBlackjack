@@ -1,4 +1,5 @@
 using Microsoft.Data.Sqlite;
+using MonoBlackjack.Core;
 using MonoBlackjack.Core.Ports;
 
 namespace MonoBlackjack.Data.Repositories;
@@ -30,11 +31,13 @@ public sealed class SqliteSettingsRepository : ISettingsRepository
             settings[reader.GetString(0)] = reader.GetString(1);
         }
 
-        return settings;
+        return SettingsContract.Sanitize(settings);
     }
 
     public void SaveSettings(int profileId, IReadOnlyDictionary<string, string> settings)
     {
+        var sanitized = SettingsContract.Sanitize(settings);
+
         using var connection = _database.OpenConnection();
         using var transaction = connection.BeginTransaction();
 
@@ -46,7 +49,7 @@ public sealed class SqliteSettingsRepository : ISettingsRepository
             delete.ExecuteNonQuery();
         }
 
-        foreach (var setting in settings)
+        foreach (var setting in sanitized)
         {
             using var insert = connection.CreateCommand();
             insert.Transaction = transaction;

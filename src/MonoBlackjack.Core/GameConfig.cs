@@ -30,6 +30,16 @@ public static class GameConfig
     public const string SettingPenetrationPercent = "PenetrationPercent";
     public const string SettingShowHandValues = "ShowHandValues";
     public const string SettingShowRecommendations = "ShowRecommendations";
+    public const string SettingKeybindHit = "KeybindHit";
+    public const string SettingKeybindStand = "KeybindStand";
+    public const string SettingKeybindDouble = "KeybindDouble";
+    public const string SettingKeybindSplit = "KeybindSplit";
+    public const string SettingKeybindSurrender = "KeybindSurrender";
+    public const string SettingKeybindPause = "KeybindPause";
+    public const string SettingKeybindBack = "KeybindBack";
+    public const string SettingGraphicsBackgroundColor = "GraphicsBackgroundColor";
+    public const string SettingGraphicsFontScale = "GraphicsFontScale";
+    public const string SettingGraphicsCardBack = "GraphicsCardBack";
 
     /// <summary>
     /// Bust threshold. Standard blackjack = 21.
