@@ -29,7 +29,6 @@ public static class GameConfig
     public const string SettingDoubleDownRestriction = "DoubleDownRestriction";
     public const string SettingPenetrationPercent = "PenetrationPercent";
     public const string SettingShowHandValues = "ShowHandValues";
-    public const string SettingShowRecommendations = "ShowRecommendations";
     public const string SettingKeybindHit = "KeybindHit";
     public const string SettingKeybindStand = "KeybindStand";
     public const string SettingKeybindDouble = "KeybindDouble";

@@ -46,9 +46,10 @@ namespace MonoBlackjack
             var scaleFactor = MathF.Min(
                 vp.Width / (float)UIConstants.BaselineWidth,
                 vp.Height / (float)UIConstants.BaselineHeight);
+            var runtimeScale = _game?.RuntimeGraphicsSettings.FontScaleMultiplier ?? 1.0f;
 
             var logicalScale = Math.Clamp(
-                baseScale * scaleFactor,
+                baseScale * scaleFactor * runtimeScale,
                 UIConstants.TextMinScale,
                 UIConstants.TextMaxScale);
 

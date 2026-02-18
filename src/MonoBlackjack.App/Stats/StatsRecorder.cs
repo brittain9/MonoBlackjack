@@ -2,6 +2,7 @@ using System.Globalization;
 using MonoBlackjack.Core;
 using MonoBlackjack.Core.Events;
 using MonoBlackjack.Core.Ports;
+using MonoBlackjack.Diagnostics;
 using MonoBlackjack.Events;
 
 namespace MonoBlackjack.Stats;
@@ -9,12 +10,14 @@ namespace MonoBlackjack.Stats;
 internal sealed class StatsRecorder : IDisposable
 {
     private readonly IStatsRepository _statsRepository;
+    private readonly Action<string>? _nonBlockingErrorNotifier;
     private readonly int _profileId;
     private readonly GameRules _rules;
     private readonly List<CardSeenRecord> _cardsSeen = [];
     private readonly List<HandResultRecord> _handResults = [];
     private readonly List<TrackedDecision> _decisions = [];
     private readonly Dictionary<int, List<Card>> _playerHands = new();
+    private readonly HashSet<int> _bustedHands = [];
     private readonly List<Card> _dealerCards = [];
     private readonly List<IDisposable> _subscriptions = [];
 
@@ -25,9 +28,15 @@ internal sealed class StatsRecorder : IDisposable
     private bool _roundOpen;
     private bool _dealerBusted;
 
-    public StatsRecorder(EventBus eventBus, IStatsRepository statsRepository, int profileId, GameRules rules)
+    public StatsRecorder(
+        EventBus eventBus,
+        IStatsRepository statsRepository,
+        int profileId,
+        GameRules rules,
+        Action<string>? nonBlockingErrorNotifier = null)
     {
         _statsRepository = statsRepository;
+        _nonBlockingErrorNotifier = nonBlockingErrorNotifier;
         _profileId = profileId;
         _rules = rules;
 
@@ -38,7 +47,9 @@ internal sealed class StatsRecorder : IDisposable
         _subscriptions.Add(eventBus.Subscribe<PlayerDoubledDown>(OnPlayerDoubledDown));
         _subscriptions.Add(eventBus.Subscribe<PlayerSplit>(OnPlayerSplit));
         _subscriptions.Add(eventBus.Subscribe<PlayerSurrendered>(OnPlayerSurrendered));
+        _subscriptions.Add(eventBus.Subscribe<PlayerBusted>(OnPlayerBusted));
         _subscriptions.Add(eventBus.Subscribe<DealerHit>(OnDealerHit));
+        _subscriptions.Add(eventBus.Subscribe<DealerHoleCardRevealed>(OnDealerHoleCardRevealed));
         _subscriptions.Add(eventBus.Subscribe<DealerBusted>(OnDealerBusted));
         _subscriptions.Add(eventBus.Subscribe<InsuranceResult>(OnInsuranceResult));
         _subscriptions.Add(eventBus.Subscribe<HandResolved>(OnHandResolved));
@@ -177,6 +188,39 @@ internal sealed class StatsRecorder : IDisposable
         _dealerBusted = true;
     }
 
+    private void OnPlayerBusted(PlayerBusted evt)
+    {
+        if (!_roundOpen)
+            return;
+
+        _bustedHands.Add(evt.HandIndex);
+    }
+
+    private void OnDealerHoleCardRevealed(DealerHoleCardRevealed evt)
+    {
+        if (!_roundOpen)
+            return;
+
+        string rank = evt.Card.Rank.ToString();
+        string suit = evt.Card.Suit.ToString();
+
+        for (int i = _cardsSeen.Count - 1; i >= 0; i--)
+        {
+            var seen = _cardsSeen[i];
+            if (seen.Recipient != "Dealer" || !seen.FaceDown)
+                continue;
+            if (!string.Equals(seen.Rank, rank, StringComparison.Ordinal))
+                continue;
+            if (!string.Equals(seen.Suit, suit, StringComparison.Ordinal))
+                continue;
+
+            _cardsSeen[i] = seen with { FaceDown = false };
+            return;
+        }
+
+        _cardsSeen.Add(new CardSeenRecord("Dealer", 0, rank, suit, false));
+    }
+
     private void OnInsuranceResult(InsuranceResult evt)
     {
         if (!_roundOpen)
@@ -190,7 +234,11 @@ internal sealed class StatsRecorder : IDisposable
         if (!_roundOpen)
             return;
 
-        _handResults.Add(new HandResultRecord(evt.HandIndex, evt.Outcome, evt.Payout));
+        _handResults.Add(new HandResultRecord(
+            evt.HandIndex,
+            evt.Outcome,
+            evt.Payout,
+            _bustedHands.Contains(evt.HandIndex)));
 
         for (int i = 0; i < _decisions.Count; i++)
         {
@@ -234,7 +282,11 @@ internal sealed class StatsRecorder : IDisposable
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"StatsRecorder error: {ex.Message}");
+            AppLogger.LogError(
+                nameof(StatsRecorder),
+                "Failed to persist round statistics.",
+                ex);
+            _nonBlockingErrorNotifier?.Invoke("Stats save failed. Session analytics may be incomplete.");
         }
 
         _roundOpen = false;
@@ -275,6 +327,7 @@ internal sealed class StatsRecorder : IDisposable
         _handResults.Clear();
         _decisions.Clear();
         _playerHands.Clear();
+        _bustedHands.Clear();
         _dealerCards.Clear();
         _betAmount = 0;
         _insurancePayoutTotal = 0;

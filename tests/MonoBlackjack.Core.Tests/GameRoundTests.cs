@@ -501,6 +501,108 @@ public class GameRoundTests
     }
 
     [Fact]
+    public void SurrenderTiming_EarlyOnly_DealerAce_AllowsDuringInsurance()
+    {
+        var rules = GameRules.Standard with
+        {
+            AllowEarlySurrender = true,
+            AllowLateSurrender = false,
+            NumberOfDecks = 1,
+            StartingBank = 10000m
+        };
+
+        var (round, _, _) = FindDealerUpcardRound(
+            Rank.Ace,
+            requireDealerBj: false,
+            requirePlayerBj: false,
+            rules: rules);
+
+        round.Phase.Should().Be(RoundPhase.Insurance);
+        _events.Should().NotContain(e => e is DealerPeeked);
+        round.CanSurrender().Should().BeTrue();
+
+        round.PlayerSurrender();
+
+        _events.Should().ContainSingle(e => e is PlayerSurrendered);
+        _events.Should().NotContain(e => e is DealerPeeked);
+        round.Phase.Should().Be(RoundPhase.Complete);
+    }
+
+    [Fact]
+    public void SurrenderTiming_LateOnly_DealerAce_BlockedUntilAfterPeek()
+    {
+        var rules = GameRules.Standard with
+        {
+            AllowEarlySurrender = false,
+            AllowLateSurrender = true,
+            NumberOfDecks = 1,
+            StartingBank = 10000m
+        };
+
+        var (round, _, _) = FindDealerUpcardRound(
+            Rank.Ace,
+            requireDealerBj: false,
+            requirePlayerBj: false,
+            rules: rules);
+
+        round.Phase.Should().Be(RoundPhase.Insurance);
+        round.CanSurrender().Should().BeFalse();
+
+        var act = () => round.PlayerSurrender();
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*surrender*");
+
+        round.DeclineInsurance();
+        _events.Should().ContainSingle(e => e is DealerPeeked);
+        round.Phase.Should().Be(RoundPhase.PlayerTurn);
+        round.CanSurrender().Should().BeTrue();
+    }
+
+    [Fact]
+    public void SurrenderTiming_EarlyOnly_DealerTen_DefersPeekUntilAction()
+    {
+        var rules = GameRules.Standard with
+        {
+            AllowEarlySurrender = true,
+            AllowLateSurrender = false,
+            NumberOfDecks = 1,
+            StartingBank = 10000m
+        };
+
+        var (round, _, _) = FindDealerUpcardRound(
+            Rank.Ten,
+            requireDealerBj: false,
+            requirePlayerBj: false,
+            rules: rules);
+
+        round.Phase.Should().Be(RoundPhase.PlayerTurn);
+        _events.Should().NotContain(e => e is DealerPeeked);
+        round.CanSurrender().Should().BeTrue();
+    }
+
+    [Fact]
+    public void SurrenderTiming_LateOnly_DealerTen_PeeksBeforePlayerTurn()
+    {
+        var rules = GameRules.Standard with
+        {
+            AllowEarlySurrender = false,
+            AllowLateSurrender = true,
+            NumberOfDecks = 1,
+            StartingBank = 10000m
+        };
+
+        var (round, _, _) = FindDealerUpcardRound(
+            Rank.Ten,
+            requireDealerBj: false,
+            requirePlayerBj: false,
+            rules: rules);
+
+        round.Phase.Should().Be(RoundPhase.PlayerTurn);
+        _events.Should().ContainSingle(e => e is DealerPeeked);
+        round.CanSurrender().Should().BeTrue();
+    }
+
+    [Fact]
     public void PlayerSurrender_AfterHit_Throws()
     {
         var rules = GameRules.Standard with
@@ -936,15 +1038,61 @@ public class GameRoundTests
             if (hand.Cards[0].Rank != Rank.Ace || hand.Cards[1].Rank != Rank.Ace)
                 continue;
 
-            // Split the aces - they auto-stand, so we can't check CanSplit after
-            // Instead, verify the auto-stand behavior means no resplit opportunity
             round.PlayerSplit();
-            // Auto-stood, round completed, no chance to resplit
+
+            if (player.Hands[0].Cards[0].Rank != Rank.Ace || player.Hands[0].Cards[1].Rank != Rank.Ace)
+                continue;
+
             round.Phase.Should().Be(RoundPhase.Complete);
+            _events.OfType<PlayerSplit>().Should().HaveCount(1);
             return;
         }
 
-        // If we couldn't find ace pair, that's ok - the unit test for CanSplit logic covers it
+        throw new InvalidOperationException("Could not find an ace resplit opportunity with ResplitAces disabled.");
+    }
+
+    [Fact]
+    public void CanSplit_ResplitAcesEnabled_AllowsSecondSplitWhenAceRedrawn()
+    {
+        var rules = GameRules.Standard with
+        {
+            ResplitAces = true,
+            NumberOfDecks = 6,
+            StartingBank = 100000m,
+            MaxSplits = 3
+        };
+
+        for (int seed = 0; seed < 20000; seed++)
+        {
+            _events.Clear();
+            var shoe = new Shoe(rules.NumberOfDecks, rules.PenetrationPercent, rules.UseCryptographicShuffle, new Random(seed));
+            var player = new Human("Player", rules.StartingBank);
+            var dealer = new Dealer(rules.DealerHitsSoft17);
+            var round = new GameRound(shoe, player, dealer, rules, e => _events.Add(e));
+            round.PlaceBet(rules.MinimumBet);
+            round.Deal();
+
+            if (round.Phase != RoundPhase.PlayerTurn)
+                continue;
+
+            var hand = player.Hands[0];
+            if (hand.Cards[0].Rank != Rank.Ace || hand.Cards[1].Rank != Rank.Ace)
+                continue;
+
+            round.PlayerSplit();
+
+            if (round.Phase != RoundPhase.PlayerTurn)
+                continue;
+            if (!round.CanSplit())
+                continue;
+
+            round.PlayerSplit();
+            player.Hands.Should().HaveCount(3);
+            _events.OfType<PlayerSplit>().Should().HaveCount(2);
+            return;
+        }
+
+        throw new InvalidOperationException("Could not find an ace resplit opportunity with ResplitAces enabled.");
     }
 
     [Fact]

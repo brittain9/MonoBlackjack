@@ -27,7 +27,6 @@ public class StateAndSettingsTests
         var selected = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             [GameConfig.SettingShowHandValues] = "false",
-            [GameConfig.SettingShowRecommendations] = "True",
             [GameConfig.SettingKeybindHit] = "h",
             [GameConfig.SettingGraphicsCardBack] = "Classic",
             [GameConfig.SettingNumberOfDecks] = "999",
@@ -36,9 +35,8 @@ public class StateAndSettingsTests
 
         var saved = SettingsState.BuildSavedSettings(selected);
 
-        Assert.Equal(4, saved.Count);
+        Assert.Equal(3, saved.Count);
         Assert.Equal("False", saved[GameConfig.SettingShowHandValues]);
-        Assert.Equal("True", saved[GameConfig.SettingShowRecommendations]);
         Assert.Equal("H", saved[GameConfig.SettingKeybindHit]);
         Assert.Equal("Classic", saved[GameConfig.SettingGraphicsCardBack]);
         Assert.False(saved.ContainsKey("LegacyCustomSetting"));
@@ -107,6 +105,35 @@ public class StateAndSettingsTests
         Assert.False(GameState.ResolveShowHandValues(explicitFalse));
         Assert.True(GameState.ResolveShowHandValues(invalidNo));
         Assert.True(GameState.ResolveShowHandValues(invalid));
+    }
+
+    [Fact]
+    public void RuntimeGraphicsSettings_FromSettings_UsesDefaultsWhenMissing()
+    {
+        var settings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        var graphics = RuntimeGraphicsSettings.FromSettings(settings);
+
+        Assert.Equal(RuntimeGraphicsSettings.ResolveBackgroundColor("Green"), graphics.BackgroundColor);
+        Assert.Equal(1.0f, graphics.FontScaleMultiplier);
+        Assert.Equal("Classic", graphics.CardBackTheme);
+    }
+
+    [Fact]
+    public void RuntimeGraphicsSettings_FromSettings_AppliesConfiguredValues()
+    {
+        var settings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [GameConfig.SettingGraphicsBackgroundColor] = "Blue",
+            [GameConfig.SettingGraphicsFontScale] = "1.2",
+            [GameConfig.SettingGraphicsCardBack] = "Red"
+        };
+
+        var graphics = RuntimeGraphicsSettings.FromSettings(settings);
+
+        Assert.Equal(RuntimeGraphicsSettings.ResolveBackgroundColor("Blue"), graphics.BackgroundColor);
+        Assert.Equal(1.2f, graphics.FontScaleMultiplier);
+        Assert.Equal("Red", graphics.CardBackTheme);
     }
 
     [Fact]

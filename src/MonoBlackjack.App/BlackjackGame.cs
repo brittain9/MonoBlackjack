@@ -23,6 +23,7 @@ public class BlackjackGame : Microsoft.Xna.Framework.Game
     private ISettingsRepository _settingsRepository = null!;
     private Texture2D _pixelTexture = null!;
     private bool _enforcingMinimumWindowSize;
+    private RuntimeGraphicsSettings _runtimeGraphicsSettings = RuntimeGraphicsSettings.Default;
 
     public void ChangeState(State state, bool pushHistory = true, bool clearHistory = false)
     {
@@ -43,10 +44,16 @@ public class BlackjackGame : Microsoft.Xna.Framework.Game
     public IStatsRepository StatsRepository => _statsRepository;
     public ISettingsRepository SettingsRepository => _settingsRepository;
     public Texture2D PixelTexture => _pixelTexture;
+    internal RuntimeGraphicsSettings RuntimeGraphicsSettings => _runtimeGraphicsSettings;
     public int ActiveProfileId { get; private set; }
     public GameRules CurrentRules { get; private set; } = GameRules.Standard;
 
-    public void UpdateRules(GameRules rules) => CurrentRules = rules;
+    public void ApplySettings(IReadOnlyDictionary<string, string> settings)
+    {
+        var merged = SettingsContract.MergeWithDefaults(settings);
+        CurrentRules = GameRules.FromSettings(merged);
+        _runtimeGraphicsSettings = RuntimeGraphicsSettings.FromSettings(merged);
+    }
 
     public BlackjackGame()
     {
@@ -107,10 +114,7 @@ public class BlackjackGame : Microsoft.Xna.Framework.Game
         ActiveProfileId = active.Id;
 
         var persistedSettings = _settingsRepository.LoadSettings(ActiveProfileId);
-        if (persistedSettings.Count > 0)
-        {
-            CurrentRules = GameRules.FromSettings(persistedSettings);
-        }
+        ApplySettings(persistedSettings);
 
         _pixelTexture = new Texture2D(GraphicsDevice, 1, 1);
         _pixelTexture.SetData(new[] { Color.White });
@@ -146,7 +150,7 @@ public class BlackjackGame : Microsoft.Xna.Framework.Game
 
     protected override void Draw(GameTime gameTime)
     {
-        GraphicsDevice.Clear(Color.DarkGreen);
+        GraphicsDevice.Clear(_runtimeGraphicsSettings.BackgroundColor);
         _currentState.Draw(gameTime, _spriteBatch);
         base.Draw(gameTime);
     }

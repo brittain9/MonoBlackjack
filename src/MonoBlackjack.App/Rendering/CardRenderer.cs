@@ -13,11 +13,14 @@ public class CardRenderer
 {
     private readonly Dictionary<string, Texture2D> _textureCache = new();
     private Texture2D? _defaultBackTexture;
+    private Color _backTint = Color.White;
 
     // Card size in pixels. Preserves 500:726 source texture aspect ratio.
     public static readonly Vector2 CardSize = new(100, 145);
 
-    public void LoadTextures(ContentManager content)
+    public Color BackTint => _backTint;
+
+    public void LoadTextures(ContentManager content, string cardBackTheme)
     {
         foreach (var suit in Enum.GetValues<Suit>())
         {
@@ -38,6 +41,18 @@ public class CardRenderer
             // Keep gameplay running even if optional back texture is missing.
             _defaultBackTexture = null;
         }
+
+        SetCardBackTheme(cardBackTheme);
+    }
+
+    public void SetCardBackTheme(string cardBackTheme)
+    {
+        _backTint = cardBackTheme.Trim().ToLowerInvariant() switch
+        {
+            "blue" => new Color(168, 212, 255),
+            "red" => new Color(255, 176, 176),
+            _ => Color.White
+        };
     }
 
     /// <summary>
@@ -48,7 +63,8 @@ public class CardRenderer
         var sprite = new CardSprite(card)
         {
             FaceDown = faceDown,
-            BackTexture = _defaultBackTexture
+            BackTexture = _defaultBackTexture,
+            BackTint = _backTint
         };
 
         if (_textureCache.TryGetValue(card.AssetName, out var texture))

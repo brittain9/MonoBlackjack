@@ -212,13 +212,152 @@ public sealed class SqliteRepositoriesTests
         }
     }
 
+    [Fact]
+    public void StatsRepository_OverviewBusts_UseExplicitPlayerBustSignal()
+    {
+        var (database, path) = CreateDatabase();
+        try
+        {
+            var profiles = new SqliteProfileRepository(database);
+            var stats = new SqliteStatsRepository(database);
+            var profile = profiles.GetOrCreateProfile("Default");
+            var rules = new RuleFingerprint("3:2", false, 6, "none");
+
+            stats.RecordRound(profile.Id, CreateRoundRecord(
+                rules,
+                bet: 10m,
+                payout: -10m,
+                action: "Double",
+                playerBusted: false));
+            stats.RecordRound(profile.Id, CreateRoundRecord(
+                rules,
+                bet: 10m,
+                payout: -10m,
+                action: "Hit",
+                playerBusted: true));
+            stats.RecordRound(profile.Id, CreateRoundRecord(
+                rules,
+                bet: 10m,
+                payout: 10m,
+                action: "Stand",
+                playerBusted: false));
+
+            var overview = stats.GetOverviewStats(profile.Id);
+            overview.Losses.Should().Be(2);
+            overview.Busts.Should().Be(1);
+        }
+        finally
+        {
+            TryDelete(path);
+        }
+    }
+
+    [Fact]
+    public void StatsRepository_CardDistribution_CountsRevealedDealerHoleCardOnce()
+    {
+        var (database, path) = CreateDatabase();
+        try
+        {
+            var profiles = new SqliteProfileRepository(database);
+            var stats = new SqliteStatsRepository(database);
+            var profile = profiles.GetOrCreateProfile("Default");
+            var rules = new RuleFingerprint("3:2", false, 6, "none");
+
+            stats.RecordRound(profile.Id, CreateRoundRecord(
+                rules,
+                bet: 10m,
+                payout: -10m,
+                action: "Stand",
+                cardsSeen:
+                [
+                    new CardSeenRecord("Player", 0, Rank.Ten.ToString(), Suit.Hearts.ToString(), false),
+                    new CardSeenRecord("Player", 0, Rank.Seven.ToString(), Suit.Clubs.ToString(), false),
+                    new CardSeenRecord("Dealer", 0, Rank.Six.ToString(), Suit.Spades.ToString(), false),
+                    new CardSeenRecord("Dealer", 0, Rank.King.ToString(), Suit.Diamonds.ToString(), true),
+                    new CardSeenRecord("Dealer", 0, Rank.King.ToString(), Suit.Diamonds.ToString(), false)
+                ]));
+
+            var distribution = stats.GetCardDistribution(profile.Id);
+            distribution.Single(x => x.Rank == "K").Count.Should().Be(1);
+        }
+        finally
+        {
+            TryDelete(path);
+        }
+    }
+
+    [Fact]
+    public void StatsRepository_RecordRound_PersistsMoneyAsMinorUnitsWithoutDrift()
+    {
+        var (database, path) = CreateDatabase();
+        try
+        {
+            var profiles = new SqliteProfileRepository(database);
+            var stats = new SqliteStatsRepository(database);
+            var profile = profiles.GetOrCreateProfile("Default");
+            var rules = new RuleFingerprint("3:2", false, 6, "none");
+
+            stats.RecordRound(profile.Id, CreateRoundRecord(
+                rules,
+                bet: 10.10m,
+                payout: -3.35m,
+                action: "Hit",
+                playerBusted: true));
+
+            using var connection = database.OpenConnection();
+            ExecuteScalarLong(connection, "SELECT BetAmount FROM Round;").Should().Be(1010);
+            ExecuteScalarLong(connection, "SELECT NetPayout FROM Round;").Should().Be(-335);
+            ExecuteScalarLong(connection, "SELECT Payout FROM HandResult;").Should().Be(-335);
+            ExecuteScalarLong(connection, "SELECT ResultPayout FROM Decision;").Should().Be(-335);
+
+            var overview = stats.GetOverviewStats(profile.Id);
+            overview.NetProfit.Should().Be(-3.35m);
+            overview.AverageBet.Should().Be(10.10m);
+        }
+        finally
+        {
+            TryDelete(path);
+        }
+    }
+
+    [Fact]
+    public void DatabaseManager_MigratesLegacyRealMoneyColumns_ToIntegerMinorUnits()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"mbj-legacy-{Guid.NewGuid():N}.db");
+
+        try
+        {
+            SeedLegacyRealMoneySchema(path);
+
+            var database = new DatabaseManager(path);
+            using var connection = database.OpenConnection();
+
+            GetColumnType(connection, "Round", "BetAmount").Should().Contain("INT");
+            GetColumnType(connection, "Round", "NetPayout").Should().Contain("INT");
+            GetColumnType(connection, "HandResult", "Payout").Should().Contain("INT");
+            GetColumnType(connection, "Decision", "ResultPayout").Should().Contain("INT");
+
+            ExecuteScalarLong(connection, "SELECT BetAmount FROM Round WHERE Id = 1;").Should().Be(1010);
+            ExecuteScalarLong(connection, "SELECT NetPayout FROM Round WHERE Id = 1;").Should().Be(-335);
+            ExecuteScalarLong(connection, "SELECT Payout FROM HandResult WHERE Id = 1;").Should().Be(-335);
+            ExecuteScalarLong(connection, "SELECT ResultPayout FROM Decision WHERE Id = 1;").Should().Be(-335);
+            ExecuteScalarLong(connection, "SELECT PlayerBusted FROM HandResult WHERE Id = 1;").Should().Be(0);
+        }
+        finally
+        {
+            TryDelete(path);
+        }
+    }
+
     private static RoundRecord CreateRoundRecord(
         RuleFingerprint rules,
         decimal bet,
         decimal payout,
         string action,
         string dealerUpcard = "6",
-        bool dealerBusted = false)
+        bool dealerBusted = false,
+        bool playerBusted = false,
+        IReadOnlyList<CardSeenRecord>? cardsSeen = null)
     {
         return new RoundRecord(
             PlayedAtUtc: DateTime.UtcNow,
@@ -228,9 +367,9 @@ public sealed class SqliteRepositoriesTests
             Rules: rules,
             HandResults:
             [
-                new HandResultRecord(0, payout > 0 ? HandOutcome.Win : HandOutcome.Lose, payout)
+                new HandResultRecord(0, payout > 0 ? HandOutcome.Win : HandOutcome.Lose, payout, playerBusted)
             ],
-            CardsSeen:
+            CardsSeen: cardsSeen ??
             [
                 new CardSeenRecord("Player", 0, Rank.Ten.ToString(), Suit.Hearts.ToString(), false),
                 new CardSeenRecord("Player", 0, Rank.Seven.ToString(), Suit.Clubs.ToString(), false),
@@ -261,6 +400,173 @@ public sealed class SqliteRepositoriesTests
         using var command = connection.CreateCommand();
         command.CommandText = sql;
         return (long)command.ExecuteScalar()!;
+    }
+
+    private static string GetColumnType(SqliteConnection connection, string tableName, string columnName)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = $"PRAGMA table_info({tableName});";
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            if (string.Equals(reader.GetString(1), columnName, StringComparison.OrdinalIgnoreCase))
+                return reader.GetString(2);
+        }
+
+        throw new InvalidOperationException($"Column '{columnName}' was not found in table '{tableName}'.");
+    }
+
+    private static void SeedLegacyRealMoneySchema(string path)
+    {
+        var connectionString = new SqliteConnectionStringBuilder { DataSource = path }.ToString();
+        using var connection = new SqliteConnection(connectionString);
+        connection.Open();
+
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            CREATE TABLE Profile (
+                Id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                Name        TEXT NOT NULL UNIQUE,
+                IsActive    INTEGER NOT NULL DEFAULT 0,
+                CreatedUtc  TEXT NOT NULL
+            );
+
+            CREATE TABLE Session (
+                Id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                ProfileId         INTEGER NOT NULL REFERENCES Profile(Id),
+                StartedUtc        TEXT NOT NULL,
+                EndedUtc          TEXT,
+                BlackjackPayout   TEXT NOT NULL,
+                DealerHitsS17     INTEGER NOT NULL,
+                DeckCount         INTEGER NOT NULL,
+                SurrenderRule     TEXT NOT NULL
+            );
+
+            CREATE TABLE Round (
+                Id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                SessionId         INTEGER NOT NULL REFERENCES Session(Id),
+                ProfileId         INTEGER NOT NULL REFERENCES Profile(Id),
+                PlayedUtc         TEXT NOT NULL,
+                BetAmount         REAL NOT NULL,
+                NetPayout         REAL NOT NULL,
+                DealerBusted      INTEGER NOT NULL DEFAULT 0,
+                BlackjackPayout   TEXT NOT NULL,
+                DealerHitsS17     INTEGER NOT NULL,
+                DeckCount         INTEGER NOT NULL,
+                SurrenderRule     TEXT NOT NULL
+            );
+
+            CREATE TABLE HandResult (
+                Id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                RoundId     INTEGER NOT NULL REFERENCES Round(Id),
+                HandIndex   INTEGER NOT NULL,
+                Outcome     TEXT NOT NULL,
+                Payout      REAL NOT NULL
+            );
+
+            CREATE TABLE CardSeen (
+                Id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                RoundId     INTEGER NOT NULL REFERENCES Round(Id),
+                Recipient   TEXT NOT NULL,
+                HandIndex   INTEGER NOT NULL,
+                Rank        TEXT NOT NULL,
+                Suit        TEXT NOT NULL,
+                FaceDown    INTEGER NOT NULL
+            );
+
+            CREATE TABLE Decision (
+                Id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                RoundId         INTEGER NOT NULL REFERENCES Round(Id),
+                HandIndex       INTEGER NOT NULL,
+                PlayerValue     INTEGER NOT NULL,
+                IsSoft          INTEGER NOT NULL,
+                DealerUpcard    TEXT NOT NULL,
+                Action          TEXT NOT NULL,
+                ResultOutcome   TEXT,
+                ResultPayout    REAL
+            );
+
+            INSERT INTO Profile (Id, Name, IsActive, CreatedUtc)
+            VALUES (1, 'Default', 1, '2026-02-18T00:00:00.0000000Z');
+
+            INSERT INTO Session (
+                Id,
+                ProfileId,
+                StartedUtc,
+                EndedUtc,
+                BlackjackPayout,
+                DealerHitsS17,
+                DeckCount,
+                SurrenderRule
+            )
+            VALUES (
+                1,
+                1,
+                '2026-02-18T00:00:00.0000000Z',
+                NULL,
+                '3:2',
+                0,
+                6,
+                'none'
+            );
+
+            INSERT INTO Round (
+                Id,
+                SessionId,
+                ProfileId,
+                PlayedUtc,
+                BetAmount,
+                NetPayout,
+                DealerBusted,
+                BlackjackPayout,
+                DealerHitsS17,
+                DeckCount,
+                SurrenderRule
+            )
+            VALUES (
+                1,
+                1,
+                1,
+                '2026-02-18T00:00:00.0000000Z',
+                10.10,
+                -3.35,
+                0,
+                '3:2',
+                0,
+                6,
+                'none'
+            );
+
+            INSERT INTO HandResult (Id, RoundId, HandIndex, Outcome, Payout)
+            VALUES (1, 1, 0, 'Lose', -3.35);
+
+            INSERT INTO CardSeen (Id, RoundId, Recipient, HandIndex, Rank, Suit, FaceDown)
+            VALUES (1, 1, 'Player', 0, 'Ten', 'Hearts', 0);
+
+            INSERT INTO Decision (
+                Id,
+                RoundId,
+                HandIndex,
+                PlayerValue,
+                IsSoft,
+                DealerUpcard,
+                Action,
+                ResultOutcome,
+                ResultPayout
+            )
+            VALUES (
+                1,
+                1,
+                0,
+                17,
+                0,
+                '6',
+                'Hit',
+                'Lose',
+                -3.35
+            );
+            """;
+        command.ExecuteNonQuery();
     }
 
     private static void TryDelete(string path)

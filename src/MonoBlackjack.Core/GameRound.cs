@@ -29,6 +29,10 @@ public class GameRound
     private decimal _insuranceBet;
     private int _currentHandIndex;
     private int _splitCount;
+    private readonly HashSet<int> _splitAceHands = [];
+    private bool _dealerPeekPending;
+    private bool _dealerPeekCompleted;
+    private bool _dealerUpcardRequiresPeek;
 
     public RoundPhase Phase { get; private set; } = RoundPhase.Betting;
 
@@ -140,6 +144,9 @@ public class GameRound
 
         // Dealer upcard determines peek/insurance flow
         var dealerUpcard = _dealer.Hand.Cards[0];
+        _dealerUpcardRequiresPeek = dealerUpcard.Rank == Rank.Ace || dealerUpcard.PointValue == 10;
+        _dealerPeekPending = dealerUpcard.Rank == Rank.Ace;
+        _dealerPeekCompleted = false;
 
         if (dealerUpcard.Rank == Rank.Ace)
         {
@@ -151,7 +158,17 @@ public class GameRound
 
         if (dealerUpcard.PointValue == 10)
         {
+            // Early surrender must happen before dealer checks for blackjack.
+            if (_rules.AllowEarlySurrender)
+            {
+                _dealerPeekPending = true;
+                Phase = RoundPhase.PlayerTurn;
+                _publish(new PlayerTurnStarted(_player.Name, 0));
+                return;
+            }
+
             // Dealer shows 10-value: peek for blackjack (no insurance)
+            _dealerPeekPending = true;
             if (DealerPeek())
                 return; // Dealer had blackjack, round resolved
         }
@@ -205,6 +222,9 @@ public class GameRound
 
     private void ResolveAfterInsuranceDecision()
     {
+        _dealerPeekPending = false;
+        _dealerPeekCompleted = true;
+
         bool dealerHasBj = _dealer.Hand.IsBlackjack;
         _publish(new DealerPeeked(dealerHasBj));
 
@@ -257,6 +277,9 @@ public class GameRound
     /// </summary>
     private bool DealerPeek()
     {
+        _dealerPeekPending = false;
+        _dealerPeekCompleted = true;
+
         bool dealerHasBj = _dealer.Hand.IsBlackjack;
         _publish(new DealerPeeked(dealerHasBj));
 
@@ -278,6 +301,10 @@ public class GameRound
     {
         if (Phase != RoundPhase.PlayerTurn)
             throw new InvalidOperationException($"Cannot hit in phase {Phase}");
+        if (!EnsureDealerPeekResolvedForPlayerAction())
+            return;
+        if (IsSplitAceRestrictedHand(_currentHandIndex))
+            throw new InvalidOperationException("Cannot hit after splitting aces.");
 
         var card = _shoe.Draw();
         _player.AddCardToHand(_currentHandIndex, card);
@@ -294,6 +321,8 @@ public class GameRound
     {
         if (Phase != RoundPhase.PlayerTurn)
             throw new InvalidOperationException($"Cannot stand in phase {Phase}");
+        if (!EnsureDealerPeekResolvedForPlayerAction())
+            return;
 
         _publish(new PlayerStood(_player.Name, _currentHandIndex));
         AdvanceToNextHand();
@@ -303,6 +332,8 @@ public class GameRound
     {
         if (Phase != RoundPhase.PlayerTurn)
             throw new InvalidOperationException($"Cannot double down in phase {Phase}");
+        if (!EnsureDealerPeekResolvedForPlayerAction())
+            return;
         if (!CanDoubleDown())
             throw new InvalidOperationException("Cannot double down for this hand state or bankroll.");
 
@@ -321,7 +352,7 @@ public class GameRound
 
     public void PlayerSurrender()
     {
-        if (Phase != RoundPhase.PlayerTurn)
+        if (Phase is not (RoundPhase.PlayerTurn or RoundPhase.Insurance))
             throw new InvalidOperationException($"Cannot surrender in phase {Phase}");
         if (_splitCount > 0)
             throw new InvalidOperationException("Cannot surrender after splitting.");
@@ -342,6 +373,8 @@ public class GameRound
     {
         if (Phase != RoundPhase.PlayerTurn)
             throw new InvalidOperationException($"Cannot split in phase {Phase}");
+        if (!EnsureDealerPeekResolvedForPlayerAction())
+            return;
         if (!CanSplit())
             throw new InvalidOperationException("Cannot split this hand.");
 
@@ -370,36 +403,12 @@ public class GameRound
         _player.AddCardToHand(newHandIndex, cardForNew);
         _publish(new CardDealt(cardForNew, _player.Name, newHandIndex, false));
 
-        // Split aces special case: auto-stand both hands
+        // Split aces can only stand/resplit (if allowed by rules).
         if (splitAces)
         {
-            _publish(new PlayerStood(_player.Name, _currentHandIndex));
-            _publish(new PlayerStood(_player.Name, newHandIndex));
-
-            // Skip to after all hands
-            _currentHandIndex = _player.Hands.Count;
-
-            // Check if any non-busted hand exists
-            bool anyNonBusted = false;
-            for (int i = 0; i < _player.Hands.Count; i++)
-            {
-                if (!_player.Hands[i].IsBusted)
-                {
-                    anyNonBusted = true;
-                    break;
-                }
-            }
-
-            if (anyNonBusted)
-            {
-                Phase = RoundPhase.DealerTurn;
-                PlayDealerTurn();
-            }
-            else
-            {
-                Phase = RoundPhase.Resolution;
-                Resolve();
-            }
+            _splitAceHands.Add(_currentHandIndex);
+            _splitAceHands.Add(newHandIndex);
+            AdvanceSplitAceHands();
             return;
         }
 
@@ -442,6 +451,8 @@ public class GameRound
         var hand = CurrentHand;
         if (hand.Cards.Count != 2)
             return false;
+        if (IsSplitAceRestrictedHand(_currentHandIndex))
+            return false;
 
         bool allowedByRestriction = _rules.DoubleDownRestriction switch
         {
@@ -475,7 +486,7 @@ public class GameRound
 
     public bool CanSurrender()
     {
-        if (Phase != RoundPhase.PlayerTurn)
+        if (Phase is not (RoundPhase.PlayerTurn or RoundPhase.Insurance))
             return false;
 
         if (_splitCount > 0)
@@ -486,8 +497,15 @@ public class GameRound
 
         if (CurrentHand.Cards.Count != 2)
             return false;
+        if (CurrentHand.IsBlackjack)
+            return false;
 
-        return _rules.AllowLateSurrender || _rules.AllowEarlySurrender;
+        if (Phase == RoundPhase.Insurance)
+            return _rules.AllowEarlySurrender && IsBeforeDealerBlackjackCheck();
+
+        bool earlyWindow = _rules.AllowEarlySurrender && IsBeforeDealerBlackjackCheck();
+        bool lateWindow = _rules.AllowLateSurrender && IsAfterDealerBlackjackCheck();
+        return earlyWindow || lateWindow;
     }
 
     private void AdvanceToNextHand()
@@ -496,10 +514,21 @@ public class GameRound
 
         if (_currentHandIndex < _player.Hands.Count)
         {
+            if (IsSplitAceRestrictedHand(_currentHandIndex))
+            {
+                AdvanceSplitAceHands();
+                return;
+            }
+
             _publish(new PlayerTurnStarted(_player.Name, _currentHandIndex));
             return;
         }
 
+        TransitionAfterPlayerHands();
+    }
+
+    private void TransitionAfterPlayerHands()
+    {
         // All hands done — check if any non-busted hand exists
         bool anyNonBusted = false;
         for (int i = 0; i < _player.Hands.Count; i++)
@@ -521,6 +550,76 @@ public class GameRound
             Phase = RoundPhase.Resolution;
             Resolve();
         }
+    }
+
+    private bool EnsureDealerPeekResolvedForPlayerAction()
+    {
+        if (!_dealerPeekPending)
+            return true;
+
+        if (DealerPeek())
+            return false;
+
+        // Dealer has no blackjack; a player natural is now decided.
+        if (_player.Hands[0].IsBlackjack)
+        {
+            _publish(new BlackjackDetected(_player.Name));
+            Phase = RoundPhase.Resolution;
+            Resolve();
+            return false;
+        }
+
+        return true;
+    }
+
+    private bool IsSplitAceRestrictedHand(int handIndex)
+    {
+        return _splitAceHands.Contains(handIndex);
+    }
+
+    private bool CanResplitCurrentSplitAceHand()
+    {
+        if (!_rules.ResplitAces)
+            return false;
+        if (!IsSplitAceRestrictedHand(_currentHandIndex))
+            return false;
+        if (_splitCount >= _rules.MaxSplits)
+            return false;
+
+        var hand = CurrentHand;
+        if (hand.Cards.Count != 2)
+            return false;
+        if (hand.Cards[0].Rank != Rank.Ace || hand.Cards[1].Rank != Rank.Ace)
+            return false;
+
+        return AvailableFunds >= _bets[_currentHandIndex];
+    }
+
+    private void AdvanceSplitAceHands()
+    {
+        while (_currentHandIndex < _player.Hands.Count)
+        {
+            if (CanResplitCurrentSplitAceHand())
+            {
+                _publish(new PlayerTurnStarted(_player.Name, _currentHandIndex));
+                return;
+            }
+
+            _publish(new PlayerStood(_player.Name, _currentHandIndex));
+            _currentHandIndex++;
+        }
+
+        TransitionAfterPlayerHands();
+    }
+
+    private bool IsBeforeDealerBlackjackCheck()
+    {
+        return !_dealerUpcardRequiresPeek || !_dealerPeekCompleted;
+    }
+
+    private bool IsAfterDealerBlackjackCheck()
+    {
+        return !_dealerUpcardRequiresPeek || _dealerPeekCompleted;
     }
 
     public void PlayDealerTurn()

@@ -13,6 +13,7 @@ public class CardSprite : Sprite
     public Card Card { get; }
     public bool FaceDown { get; set; }
     public Texture2D? BackTexture { get; set; }
+    public Color BackTint { get; set; } = Color.White;
 
     public CardSprite(Card card)
     {
@@ -29,11 +30,15 @@ public class CardSprite : Sprite
         if (texture == null)
             return;
 
+        var drawColor = FaceDown && BackTexture != null
+            ? BackTint
+            : Color.White;
+
         spriteBatch.Draw(
             texture,
             DestRect,
             null,
-            Color.White * Opacity,
+            drawColor * Opacity,
             Rotation,
             Vector2.Zero,
             SpriteEffects.None,

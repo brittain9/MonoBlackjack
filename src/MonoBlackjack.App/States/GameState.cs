@@ -65,6 +65,8 @@ internal class GameState : State
     private bool _showAlignmentGuides;
     private bool _showHandValues = true;
     private KeybindMap _keybinds = null!;
+    private string _warningMessage = string.Empty;
+    private float _warningSecondsRemaining;
 
     private enum GamePhase { Betting, Playing, Bankrupt }
     private GamePhase _gamePhase;
@@ -99,10 +101,10 @@ internal class GameState : State
         _pixelTexture = game.PixelTexture;
         _profileId = profileId;
         _rules = ApplySelectedMode(game.CurrentRules, mode);
-        ReloadPlayerSettings();
 
         _cardRenderer = new CardRenderer();
-        _cardRenderer.LoadTextures(content);
+        _cardRenderer.LoadTextures(content, _game.RuntimeGraphicsSettings.CardBackTheme);
+        ReloadPlayerSettings();
 
         _shoe = new Shoe(_rules.NumberOfDecks, _rules.PenetrationPercent, _rules.UseCryptographicShuffle);
         _player = new Human("Player", _rules.StartingBank);
@@ -111,7 +113,7 @@ internal class GameState : State
         _eventBus = new EventBus();
         _tweenManager = new TweenManager();
         _sceneRenderer = new SceneRenderer();
-        _statsRecorder = new StatsRecorder(_eventBus, statsRepository, profileId, _rules);
+        _statsRecorder = new StatsRecorder(_eventBus, statsRepository, profileId, _rules, OnStatsPersistenceFailure);
 
         _cardLayer = new SpriteLayer(10);
         _uiLayer = new SpriteLayer(20);
@@ -1012,6 +1014,8 @@ internal class GameState : State
     public override void Update(GameTime gameTime)
     {
         CaptureKeyboardState();
+        float deltaSeconds = (float)gameTime.ElapsedGameTime.TotalSeconds;
+        TickWarning(deltaSeconds);
 
         bool pausePressed = IsActionJustPressed(InputAction.Pause);
         bool backPressed = IsActionJustPressed(InputAction.Back);
@@ -1091,7 +1095,6 @@ internal class GameState : State
             _declineInsuranceButton.Update(gameTime);
         }
 
-        float deltaSeconds = (float)gameTime.ElapsedGameTime.TotalSeconds;
         _tweenManager.Update(deltaSeconds);
 
         if (_waitingForRoundReset && !_tweenManager.HasActiveTweens)
@@ -1148,6 +1151,7 @@ internal class GameState : State
             if (_devMenu.IsOpen)
                 _devMenu.Draw(gameTime, spriteBatch, _pixelTexture, _font, GetResponsiveScale(1f));
 
+            DrawWarningBanner(spriteBatch);
             spriteBatch.End();
             return;
         }
@@ -1171,6 +1175,7 @@ internal class GameState : State
             if (_devMenu.IsOpen)
                 _devMenu.Draw(gameTime, spriteBatch, _pixelTexture, _font, GetResponsiveScale(1f));
 
+            DrawWarningBanner(spriteBatch);
             spriteBatch.End();
             return;
         }
@@ -1198,6 +1203,7 @@ internal class GameState : State
             if (GetPlayerHandCount() > 1)
                 DrawActiveHandIndicator(spriteBatch);
 
+            DrawWarningBanner(spriteBatch);
             spriteBatch.End();
         }
         else if (!_isPaused && IsInsuranceInteractionEnabled())
@@ -1207,6 +1213,7 @@ internal class GameState : State
             DrawHandValues(spriteBatch);
             _insuranceButton.Draw(gameTime, spriteBatch);
             _declineInsuranceButton.Draw(gameTime, spriteBatch);
+            DrawWarningBanner(spriteBatch);
             spriteBatch.End();
         }
         else if (isBettingMode)
@@ -1215,6 +1222,13 @@ internal class GameState : State
             spriteBatch.Begin();
             DrawHud(spriteBatch, vp);
             DrawHandValues(spriteBatch);
+            DrawWarningBanner(spriteBatch);
+            spriteBatch.End();
+        }
+        else if (_warningSecondsRemaining > 0f)
+        {
+            spriteBatch.Begin();
+            DrawWarningBanner(spriteBatch);
             spriteBatch.End();
         }
 
@@ -1224,6 +1238,7 @@ internal class GameState : State
             DrawPauseOverlay(gameTime, spriteBatch);
             if (_devMenu.IsOpen)
                 _devMenu.Draw(gameTime, spriteBatch, _pixelTexture, _font, GetResponsiveScale(1f));
+            DrawWarningBanner(spriteBatch);
             spriteBatch.End();
             return;
         }
@@ -1232,6 +1247,7 @@ internal class GameState : State
         {
             spriteBatch.Begin();
             _devMenu.Draw(gameTime, spriteBatch, _pixelTexture, _font, GetResponsiveScale(1f));
+            DrawWarningBanner(spriteBatch);
             spriteBatch.End();
         }
     }
@@ -1390,6 +1406,44 @@ internal class GameState : State
         }
     }
 
+    private void DrawWarningBanner(SpriteBatch spriteBatch)
+    {
+        if (_warningSecondsRemaining <= 0f || string.IsNullOrWhiteSpace(_warningMessage))
+            return;
+
+        var vp = _graphicsDevice.Viewport;
+        float scale = GetResponsiveScale(0.56f);
+        var size = _font.MeasureString(_warningMessage) * scale;
+        var position = new Vector2(vp.Width / 2f - size.X / 2f, vp.Height - size.Y - 14f);
+
+        spriteBatch.DrawString(
+            _font,
+            _warningMessage,
+            position,
+            Color.OrangeRed,
+            0f,
+            Vector2.Zero,
+            scale,
+            SpriteEffects.None,
+            0f);
+    }
+
+    private void TickWarning(float deltaSeconds)
+    {
+        if (_warningSecondsRemaining <= 0f)
+            return;
+
+        _warningSecondsRemaining = Math.Max(0f, _warningSecondsRemaining - deltaSeconds);
+        if (_warningSecondsRemaining <= 0f)
+            _warningMessage = string.Empty;
+    }
+
+    private void OnStatsPersistenceFailure(string message)
+    {
+        _warningMessage = message;
+        _warningSecondsRemaining = 4.0f;
+    }
+
     private void DrawHandValues(SpriteBatch spriteBatch)
     {
         if (!_showHandValues)
@@ -1524,6 +1578,9 @@ internal class GameState : State
         var settings = _game.SettingsRepository.LoadSettings(_profileId);
         _showHandValues = ResolveShowHandValues(settings);
         _keybinds = KeybindMap.FromSettings(settings);
+        _cardRenderer.SetCardBackTheme(_game.RuntimeGraphicsSettings.CardBackTheme);
+        foreach (var tracked in _trackedCards)
+            tracked.Sprite.BackTint = _cardRenderer.BackTint;
     }
 
     internal static GameRules ApplySelectedMode(GameRules rules, BetFlowMode mode)

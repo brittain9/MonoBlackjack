@@ -11,7 +11,8 @@ public sealed record RuleFingerprint(
 public sealed record HandResultRecord(
     int HandIndex,
     HandOutcome Outcome,
-    decimal Payout);
+    decimal Payout,
+    bool PlayerBusted);
 
 public sealed record CardSeenRecord(
     string Recipient,

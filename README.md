@@ -2,7 +2,8 @@
 
 .NET 10 and Mono 3.8.4
 
-When I was first learning programming years ago, I wrote console Blackjack in C++, and then later rewrote in C# after learning the language. I started this project in 2023. My vision now is to turn it into a Retro Style Fully Configurable Casino-Grade Blackjack game with in depth data simulation.
+When I was first learning C++ in 2022, I wrote console a Blackjack. I later rewrote in C# and started this project in 2023 as I was interested in game development. 
+My vision now is to turn it into a Retro Style Casino-Grade Blackjack game with training and data features
 
 Features:
 - Cryptograhic casino-grade shuffling

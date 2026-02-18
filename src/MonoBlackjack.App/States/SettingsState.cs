@@ -55,11 +55,7 @@ internal sealed class SettingsState : State
         foreach (var kvp in persisted)
             _loadedSettings[kvp.Key] = kvp.Value;
 
-        if (persisted.Count > 0)
-        {
-            var rules = GameRules.FromSettings(persisted);
-            _game.UpdateRules(rules);
-        }
+        _game.ApplySettings(persisted);
 
         _buttonTexture = _content.Load<Texture2D>("Controls/Button");
         _font = _content.Load<SpriteFont>("Fonts/MyFont");
@@ -396,12 +392,6 @@ internal sealed class SettingsState : State
             "Show Hand Values",
             [new SettingChoice("Yes", "True"), new SettingChoice("No", "False")],
             current);
-        AddRow(
-            SettingsSection.Assistance,
-            GameConfig.SettingShowRecommendations,
-            "Show Recommendations",
-            [new SettingChoice("No", "False"), new SettingChoice("Yes", "True")],
-            current);
     }
 
     private Dictionary<string, string> BuildCurrentSettings()
@@ -597,8 +587,7 @@ internal sealed class SettingsState : State
             return;
         }
 
-        var newRules = GameRules.FromSettings(settings);
-        _game.UpdateRules(newRules);
+        _game.ApplySettings(settings);
         _settingsRepository.SaveSettings(_profileId, settings);
 
         _loadedSettings.Clear();

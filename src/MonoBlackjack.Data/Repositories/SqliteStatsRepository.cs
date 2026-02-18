@@ -5,6 +5,7 @@ namespace MonoBlackjack.Data.Repositories;
 
 public sealed class SqliteStatsRepository : IStatsRepository
 {
+    private const decimal MinorUnitScale = 100m;
     private readonly DatabaseManager _database;
 
     public SqliteStatsRepository(DatabaseManager database)
@@ -66,8 +67,8 @@ public sealed class SqliteStatsRepository : IStatsRepository
         command.Parameters.AddWithValue("$sessionId", sessionId);
         command.Parameters.AddWithValue("$profileId", profileId);
         command.Parameters.AddWithValue("$playedUtc", round.PlayedAtUtc.ToString("O"));
-        command.Parameters.AddWithValue("$betAmount", (double)round.BetAmount);
-        command.Parameters.AddWithValue("$netPayout", (double)round.NetPayout);
+        command.Parameters.AddWithValue("$betAmount", ToMinorUnits(round.BetAmount));
+        command.Parameters.AddWithValue("$netPayout", ToMinorUnits(round.NetPayout));
         command.Parameters.AddWithValue("$dealerBusted", round.DealerBusted ? 1 : 0);
         command.Parameters.AddWithValue("$blackjackPayout", round.Rules.BlackjackPayout);
         command.Parameters.AddWithValue("$dealerHitsS17", round.Rules.DealerHitsSoft17 ? 1 : 0);
@@ -88,13 +89,14 @@ public sealed class SqliteStatsRepository : IStatsRepository
             using var command = connection.CreateCommand();
             command.Transaction = transaction;
             command.CommandText = """
-                INSERT INTO HandResult (RoundId, HandIndex, Outcome, Payout)
-                VALUES ($roundId, $handIndex, $outcome, $payout);
+                INSERT INTO HandResult (RoundId, HandIndex, Outcome, Payout, PlayerBusted)
+                VALUES ($roundId, $handIndex, $outcome, $payout, $playerBusted);
                 """;
             command.Parameters.AddWithValue("$roundId", roundId);
             command.Parameters.AddWithValue("$handIndex", result.HandIndex);
             command.Parameters.AddWithValue("$outcome", result.Outcome.ToString());
-            command.Parameters.AddWithValue("$payout", (double)result.Payout);
+            command.Parameters.AddWithValue("$payout", ToMinorUnits(result.Payout));
+            command.Parameters.AddWithValue("$playerBusted", result.PlayerBusted ? 1 : 0);
             command.ExecuteNonQuery();
         }
     }
@@ -166,7 +168,7 @@ public sealed class SqliteStatsRepository : IStatsRepository
                 decision.ResultOutcome?.ToString() is { } outcome ? outcome : DBNull.Value);
             command.Parameters.AddWithValue(
                 "$resultPayout",
-                decision.ResultPayout.HasValue ? (double)decision.ResultPayout.Value : DBNull.Value);
+                decision.ResultPayout.HasValue ? ToMinorUnits(decision.ResultPayout.Value) : DBNull.Value);
             command.ExecuteNonQuery();
         }
     }
@@ -283,7 +285,8 @@ public sealed class SqliteStatsRepository : IStatsRepository
                 SELECT
                     COUNT(*),
                     COALESCE(SUM(NetPayout), 0),
-                    COALESCE(AVG(CASE WHEN BetAmount > 0 THEN BetAmount END), 0),
+                    COALESCE(SUM(CASE WHEN BetAmount > 0 THEN BetAmount ELSE 0 END), 0),
+                    COALESCE(SUM(CASE WHEN BetAmount > 0 THEN 1 ELSE 0 END), 0),
                     COALESCE(MAX(NetPayout), 0),
                     COALESCE(MIN(NetPayout), 0)
                 FROM Round WHERE ProfileId = $profileId;
@@ -293,10 +296,14 @@ public sealed class SqliteStatsRepository : IStatsRepository
             if (reader.Read())
             {
                 totalRounds = reader.GetInt32(0);
-                netProfit = (decimal)reader.GetDouble(1);
-                avgBet = (decimal)reader.GetDouble(2);
-                biggestWin = (decimal)reader.GetDouble(3);
-                worstLoss = (decimal)reader.GetDouble(4);
+                netProfit = FromMinorUnits(reader.GetInt64(1));
+                long positiveBetSum = reader.GetInt64(2);
+                long positiveBetCount = reader.GetInt64(3);
+                avgBet = positiveBetCount > 0
+                    ? FromMinorUnits(positiveBetSum) / positiveBetCount
+                    : 0m;
+                biggestWin = FromMinorUnits(reader.GetInt64(4));
+                worstLoss = FromMinorUnits(reader.GetInt64(5));
             }
         }
 
@@ -334,24 +341,17 @@ public sealed class SqliteStatsRepository : IStatsRepository
             }
         }
 
-        // Bust count: hands that lost where the player busted.
-        // A busted hand has a Hit or Double decision with Lose outcome and no Stand decision.
+        // Bust count: explicit player bust signals only.
         int busts = 0;
         using (var cmd = connection.CreateCommand())
         {
             cmd.CommandText = """
-                SELECT COUNT(DISTINCT d.RoundId || '-' || d.HandIndex)
-                FROM Decision d
-                JOIN Round r ON r.Id = d.RoundId
+                SELECT COUNT(*)
+                FROM HandResult hr
+                JOIN Round r ON r.Id = hr.RoundId
                 WHERE r.ProfileId = $profileId
-                  AND d.ResultOutcome = 'Lose'
-                  AND d.Action IN ('Hit', 'Double')
-                  AND NOT EXISTS (
-                      SELECT 1 FROM Decision d2
-                      WHERE d2.RoundId = d.RoundId
-                        AND d2.HandIndex = d.HandIndex
-                        AND d2.Action = 'Stand'
-                  );
+                  AND hr.Outcome = 'Lose'
+                  AND hr.PlayerBusted = 1;
                 """;
             cmd.Parameters.AddWithValue("$profileId", profileId);
             busts = Convert.ToInt32((long)cmd.ExecuteScalar()!);
@@ -372,7 +372,7 @@ public sealed class SqliteStatsRepository : IStatsRepository
             bool? streakPositive = null;
             while (reader.Read())
             {
-                decimal payout = (decimal)reader.GetDouble(0);
+                decimal payout = FromMinorUnits(reader.GetInt64(0));
                 if (payout == 0) continue;
 
                 bool isWin = payout > 0;
@@ -415,7 +415,7 @@ public sealed class SqliteStatsRepository : IStatsRepository
         int roundNum = 0;
         while (reader.Read())
         {
-            cumulative += (decimal)reader.GetDouble(0);
+            cumulative += FromMinorUnits(reader.GetInt64(0));
             roundNum++;
             points.Add(new BankrollPoint(roundNum, cumulative));
         }
@@ -576,7 +576,7 @@ public sealed class SqliteStatsRepository : IStatsRepository
                 reader.GetInt32(3),
                 reader.GetInt32(4),
                 reader.GetInt32(5),
-                (decimal)reader.GetDouble(6)));
+                FromMinorUnits(reader.GetInt64(6))));
         }
 
         return cells;
@@ -656,4 +656,13 @@ public sealed class SqliteStatsRepository : IStatsRepository
         return ruleSets;
     }
 
+    private static long ToMinorUnits(decimal value)
+    {
+        return decimal.ToInt64(decimal.Round(value * MinorUnitScale, 0, MidpointRounding.AwayFromZero));
+    }
+
+    private static decimal FromMinorUnits(long value)
+    {
+        return value / MinorUnitScale;
+    }
 }
