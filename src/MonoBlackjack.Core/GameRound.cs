@@ -475,15 +475,6 @@ public class GameRound
         return AvailableFunds >= _bets[_currentHandIndex];
     }
 
-    public bool CanPlaceInsurance()
-    {
-        if (Phase != RoundPhase.Insurance)
-            return false;
-
-        decimal insuranceAmount = _bets[0] / 2;
-        return AvailableFunds >= insuranceAmount;
-    }
-
     public bool CanSurrender()
     {
         if (Phase is not (RoundPhase.PlayerTurn or RoundPhase.Insurance))

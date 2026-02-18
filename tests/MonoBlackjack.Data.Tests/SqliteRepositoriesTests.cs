@@ -321,6 +321,55 @@ public sealed class SqliteRepositoriesTests
     }
 
     [Fact]
+    public void StatsRepository_RecordRound_PersistsNullableDecisionResultFields()
+    {
+        var (database, path) = CreateDatabase();
+        try
+        {
+            var profiles = new SqliteProfileRepository(database);
+            var stats = new SqliteStatsRepository(database);
+            var profile = profiles.GetOrCreateProfile("Default");
+            var rules = new RuleFingerprint("3:2", false, 6, "none");
+
+            var round = new RoundRecord(
+                PlayedAtUtc: DateTime.UtcNow,
+                BetAmount: 10m,
+                NetPayout: 0m,
+                DealerBusted: false,
+                Rules: rules,
+                HandResults:
+                [
+                    new HandResultRecord(0, HandOutcome.Push, 0m, false)
+                ],
+                CardsSeen:
+                [
+                    new CardSeenRecord("Player", 0, Rank.Ten.ToString(), Suit.Hearts.ToString(), false),
+                    new CardSeenRecord("Player", 0, Rank.Seven.ToString(), Suit.Clubs.ToString(), false),
+                    new CardSeenRecord("Dealer", 0, Rank.Six.ToString(), Suit.Spades.ToString(), false),
+                    new CardSeenRecord("Dealer", 0, Rank.King.ToString(), Suit.Diamonds.ToString(), true)
+                ],
+                Decisions:
+                [
+                    new DecisionRecord(0, 17, false, "6", "Stand", null, null)
+                ]);
+
+            stats.RecordRound(profile.Id, round);
+
+            using var connection = database.OpenConnection();
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT ResultOutcome, ResultPayout FROM Decision LIMIT 1;";
+            using var reader = command.ExecuteReader();
+            reader.Read().Should().BeTrue();
+            reader.IsDBNull(0).Should().BeTrue();
+            reader.IsDBNull(1).Should().BeTrue();
+        }
+        finally
+        {
+            TryDelete(path);
+        }
+    }
+
+    [Fact]
     public void DatabaseManager_MigratesLegacyRealMoneyColumns_ToIntegerMinorUnits()
     {
         string path = Path.Combine(Path.GetTempPath(), $"mbj-legacy-{Guid.NewGuid():N}.db");

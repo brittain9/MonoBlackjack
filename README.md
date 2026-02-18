@@ -16,6 +16,12 @@ Features:
 - Domain Driven Design
 - Event driven architecture
 - Unit tests
+
+Planned:
+- Sounds
+- Animations
+- Blackjack Assisstant
+- 
   
 ![menu](img/menu.png)
 ![game](img/game.png)

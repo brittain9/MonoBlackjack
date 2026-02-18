@@ -84,19 +84,24 @@ public sealed class SqliteStatsRepository : IStatsRepository
         int roundId,
         IReadOnlyList<HandResultRecord> handResults)
     {
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            INSERT INTO HandResult (RoundId, HandIndex, Outcome, Payout, PlayerBusted)
+            VALUES ($roundId, $handIndex, $outcome, $payout, $playerBusted);
+            """;
+        command.Parameters.AddWithValue("$roundId", roundId);
+        var handIndexParameter = command.Parameters.AddWithValue("$handIndex", 0);
+        var outcomeParameter = command.Parameters.AddWithValue("$outcome", string.Empty);
+        var payoutParameter = command.Parameters.AddWithValue("$payout", 0);
+        var playerBustedParameter = command.Parameters.AddWithValue("$playerBusted", 0);
+
         foreach (var result in handResults)
         {
-            using var command = connection.CreateCommand();
-            command.Transaction = transaction;
-            command.CommandText = """
-                INSERT INTO HandResult (RoundId, HandIndex, Outcome, Payout, PlayerBusted)
-                VALUES ($roundId, $handIndex, $outcome, $payout, $playerBusted);
-                """;
-            command.Parameters.AddWithValue("$roundId", roundId);
-            command.Parameters.AddWithValue("$handIndex", result.HandIndex);
-            command.Parameters.AddWithValue("$outcome", result.Outcome.ToString());
-            command.Parameters.AddWithValue("$payout", ToMinorUnits(result.Payout));
-            command.Parameters.AddWithValue("$playerBusted", result.PlayerBusted ? 1 : 0);
+            handIndexParameter.Value = result.HandIndex;
+            outcomeParameter.Value = result.Outcome.ToString();
+            payoutParameter.Value = ToMinorUnits(result.Payout);
+            playerBustedParameter.Value = result.PlayerBusted ? 1 : 0;
             command.ExecuteNonQuery();
         }
     }
@@ -107,20 +112,26 @@ public sealed class SqliteStatsRepository : IStatsRepository
         int roundId,
         IReadOnlyList<CardSeenRecord> cardsSeen)
     {
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            INSERT INTO CardSeen (RoundId, Recipient, HandIndex, Rank, Suit, FaceDown)
+            VALUES ($roundId, $recipient, $handIndex, $rank, $suit, $faceDown);
+            """;
+        command.Parameters.AddWithValue("$roundId", roundId);
+        var recipientParameter = command.Parameters.AddWithValue("$recipient", string.Empty);
+        var handIndexParameter = command.Parameters.AddWithValue("$handIndex", 0);
+        var rankParameter = command.Parameters.AddWithValue("$rank", string.Empty);
+        var suitParameter = command.Parameters.AddWithValue("$suit", string.Empty);
+        var faceDownParameter = command.Parameters.AddWithValue("$faceDown", 0);
+
         foreach (var card in cardsSeen)
         {
-            using var command = connection.CreateCommand();
-            command.Transaction = transaction;
-            command.CommandText = """
-                INSERT INTO CardSeen (RoundId, Recipient, HandIndex, Rank, Suit, FaceDown)
-                VALUES ($roundId, $recipient, $handIndex, $rank, $suit, $faceDown);
-                """;
-            command.Parameters.AddWithValue("$roundId", roundId);
-            command.Parameters.AddWithValue("$recipient", card.Recipient);
-            command.Parameters.AddWithValue("$handIndex", card.HandIndex);
-            command.Parameters.AddWithValue("$rank", card.Rank);
-            command.Parameters.AddWithValue("$suit", card.Suit);
-            command.Parameters.AddWithValue("$faceDown", card.FaceDown ? 1 : 0);
+            recipientParameter.Value = card.Recipient;
+            handIndexParameter.Value = card.HandIndex;
+            rankParameter.Value = card.Rank;
+            suitParameter.Value = card.Suit;
+            faceDownParameter.Value = card.FaceDown ? 1 : 0;
             command.ExecuteNonQuery();
         }
     }
@@ -131,44 +142,50 @@ public sealed class SqliteStatsRepository : IStatsRepository
         int roundId,
         IReadOnlyList<DecisionRecord> decisions)
     {
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            INSERT INTO Decision (
+                RoundId,
+                HandIndex,
+                PlayerValue,
+                IsSoft,
+                DealerUpcard,
+                Action,
+                ResultOutcome,
+                ResultPayout
+            )
+            VALUES (
+                $roundId,
+                $handIndex,
+                $playerValue,
+                $isSoft,
+                $dealerUpcard,
+                $action,
+                $resultOutcome,
+                $resultPayout
+            );
+            """;
+        command.Parameters.AddWithValue("$roundId", roundId);
+        var handIndexParameter = command.Parameters.AddWithValue("$handIndex", 0);
+        var playerValueParameter = command.Parameters.AddWithValue("$playerValue", 0);
+        var isSoftParameter = command.Parameters.AddWithValue("$isSoft", 0);
+        var dealerUpcardParameter = command.Parameters.AddWithValue("$dealerUpcard", string.Empty);
+        var actionParameter = command.Parameters.AddWithValue("$action", string.Empty);
+        var resultOutcomeParameter = command.Parameters.AddWithValue("$resultOutcome", DBNull.Value);
+        var resultPayoutParameter = command.Parameters.AddWithValue("$resultPayout", DBNull.Value);
+
         foreach (var decision in decisions)
         {
-            using var command = connection.CreateCommand();
-            command.Transaction = transaction;
-            command.CommandText = """
-                INSERT INTO Decision (
-                    RoundId,
-                    HandIndex,
-                    PlayerValue,
-                    IsSoft,
-                    DealerUpcard,
-                    Action,
-                    ResultOutcome,
-                    ResultPayout
-                )
-                VALUES (
-                    $roundId,
-                    $handIndex,
-                    $playerValue,
-                    $isSoft,
-                    $dealerUpcard,
-                    $action,
-                    $resultOutcome,
-                    $resultPayout
-                );
-                """;
-            command.Parameters.AddWithValue("$roundId", roundId);
-            command.Parameters.AddWithValue("$handIndex", decision.HandIndex);
-            command.Parameters.AddWithValue("$playerValue", decision.PlayerValue);
-            command.Parameters.AddWithValue("$isSoft", decision.IsSoft ? 1 : 0);
-            command.Parameters.AddWithValue("$dealerUpcard", decision.DealerUpcard);
-            command.Parameters.AddWithValue("$action", decision.Action);
-            command.Parameters.AddWithValue(
-                "$resultOutcome",
-                decision.ResultOutcome?.ToString() is { } outcome ? outcome : DBNull.Value);
-            command.Parameters.AddWithValue(
-                "$resultPayout",
-                decision.ResultPayout.HasValue ? ToMinorUnits(decision.ResultPayout.Value) : DBNull.Value);
+            handIndexParameter.Value = decision.HandIndex;
+            playerValueParameter.Value = decision.PlayerValue;
+            isSoftParameter.Value = decision.IsSoft ? 1 : 0;
+            dealerUpcardParameter.Value = decision.DealerUpcard;
+            actionParameter.Value = decision.Action;
+            resultOutcomeParameter.Value = decision.ResultOutcome?.ToString() ?? (object)DBNull.Value;
+            resultPayoutParameter.Value = decision.ResultPayout.HasValue
+                ? ToMinorUnits(decision.ResultPayout.Value)
+                : DBNull.Value;
             command.ExecuteNonQuery();
         }
     }

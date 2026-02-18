@@ -21,37 +21,13 @@ Status: Ready for implementation
 ## P2 - Performance + Cleanup
 
 10. **Remove per-button mouse polling hot path**
-    - Problem: each button polls mouse state independently.
-    - Actions:
-      - Build per-frame input snapshot and pass into button updates.
-      - Update state classes to use centralized input snapshot.
-    - Files:
-      - `src/MonoBlackjack.App/Controls/Button.cs`
-      - `src/MonoBlackjack.App/States/GameState.cs`
-      - `src/MonoBlackjack.App/States/StatsState.cs`
-      - `src/MonoBlackjack.App/States/SettingsState.cs`
-      - `src/MonoBlackjack.App/States/MenuState.cs`
-
 11. **Optimize SQLite insert loops**
-    - Problem: per-row command allocation in stats inserts.
-    - Actions:
-      - Reuse prepared commands for hand results, cards seen, and decisions.
-      - Keep transaction semantics unchanged.
-    - Files:
-      - `src/MonoBlackjack.Data/Repositories/SqliteStatsRepository.cs`
-      - `tests/MonoBlackjack.Data.Tests/SqliteRepositoriesTests.cs`
-
 12. **Remove dead/unused APIs**
-    - Problem: unused code surface increases maintenance overhead.
-    - Actions:
-      - Remove or integrate `GameRound.CanPlaceInsurance()`.
-      - Remove or implement `Button.Clicked`.
-    - Files:
-      - `src/MonoBlackjack.Core/GameRound.cs`
-      - `src/MonoBlackjack.App/Controls/Button.cs`
 
 ## Suggested Execution Order
 
 1. Ship all P0 items with tests.
 2. Resolve settings/runtime parity and stats observability.
 3. Do class decomposition and perf cleanup in incremental PR-sized slices.
+
+- Make cool cursor/souunds in future.

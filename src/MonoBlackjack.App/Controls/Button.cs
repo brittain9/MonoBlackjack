@@ -21,7 +21,6 @@ namespace MonoBlackjack
         private float _cachedTextScale = 1f;
 
         public event EventHandler? Click;
-        public bool Clicked { get; private set; }
         public Color PenColor { get; set; }
 
         /// <summary>
@@ -141,9 +140,9 @@ namespace MonoBlackjack
         public override void Update(GameTime gameTime, in MouseFrameSnapshot mouseSnapshot)
         {
             _isHovering = mouseSnapshot.CursorRect.Intersects(DestRect);
-            Clicked = _isHovering && mouseSnapshot.LeftReleasedThisFrame;
+            bool isClickedThisFrame = _isHovering && mouseSnapshot.LeftReleasedThisFrame;
 
-            if (Clicked)
+            if (isClickedThisFrame)
                 Click?.Invoke(this, EventArgs.Empty);
         }
     }
