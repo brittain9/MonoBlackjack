@@ -83,21 +83,21 @@ internal sealed class GamePauseController
         }
     }
 
-    public void Update(GameTime gameTime)
+    public void Update(GameTime gameTime, in MouseFrameSnapshot mouseSnapshot)
     {
         if (!IsPaused)
             return;
 
         if (IsQuitConfirmationVisible)
         {
-            _confirmQuitButton.Update(gameTime);
-            _cancelQuitButton.Update(gameTime);
+            _confirmQuitButton.Update(gameTime, mouseSnapshot);
+            _cancelQuitButton.Update(gameTime, mouseSnapshot);
             return;
         }
 
-        _resumeButton.Update(gameTime);
-        _settingsButton.Update(gameTime);
-        _quitButton.Update(gameTime);
+        _resumeButton.Update(gameTime, mouseSnapshot);
+        _settingsButton.Update(gameTime, mouseSnapshot);
+        _quitButton.Update(gameTime, mouseSnapshot);
     }
 
     public void HandleResize(Viewport vp, float actionButtonPadding)

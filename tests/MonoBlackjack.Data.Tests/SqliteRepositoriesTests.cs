@@ -342,6 +342,27 @@ public sealed class SqliteRepositoriesTests
             ExecuteScalarLong(connection, "SELECT Payout FROM HandResult WHERE Id = 1;").Should().Be(-335);
             ExecuteScalarLong(connection, "SELECT ResultPayout FROM Decision WHERE Id = 1;").Should().Be(-335);
             ExecuteScalarLong(connection, "SELECT PlayerBusted FROM HandResult WHERE Id = 1;").Should().Be(0);
+
+            GetForeignKeyTargetTable(connection, "HandResult").Should().Be("Round");
+            GetForeignKeyTargetTable(connection, "CardSeen").Should().Be("Round");
+            GetForeignKeyTargetTable(connection, "Decision").Should().Be("Round");
+
+            var stats = new SqliteStatsRepository(database);
+            var rules = new RuleFingerprint("3:2", false, 6, "none");
+
+            stats.RecordRound(
+                profileId: 1,
+                CreateRoundRecord(
+                    rules,
+                    bet: 5m,
+                    payout: 5m,
+                    action: "Stand",
+                    dealerUpcard: "6",
+                    dealerBusted: false,
+                    playerBusted: false));
+
+            ExecuteScalarLong(connection, "SELECT COUNT(*) FROM Round;").Should().Be(2);
+            ExecuteScalarLong(connection, "SELECT COUNT(*) FROM CardSeen;").Should().BeGreaterThan(1);
         }
         finally
         {
@@ -414,6 +435,16 @@ public sealed class SqliteRepositoriesTests
         }
 
         throw new InvalidOperationException($"Column '{columnName}' was not found in table '{tableName}'.");
+    }
+
+    private static string GetForeignKeyTargetTable(SqliteConnection connection, string tableName)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = $"PRAGMA foreign_key_list({tableName});";
+        using var reader = command.ExecuteReader();
+        if (!reader.Read())
+            throw new InvalidOperationException($"Table '{tableName}' has no foreign key definitions.");
+        return reader.GetString(2);
     }
 
     private static void SeedLegacyRealMoneySchema(string path)

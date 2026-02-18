@@ -116,8 +116,11 @@ internal class MenuState : State
 
     public override void Update(GameTime gameTime)
     {
+        var mouseSnapshot = CaptureMouseSnapshot();
         foreach (var button in _buttons)
-            button.Update(gameTime);
+            button.Update(gameTime, mouseSnapshot);
+
+        CommitMouseState();
     }
 
     public override void HandleResize(Rectangle vp)

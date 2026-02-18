@@ -41,9 +41,13 @@ internal sealed class SplitSetupTool : IDevMenuTool
         _queueRandomSplitButton.Position = _buttonPosition;
     }
 
-    public void Update(GameTime gameTime, KeyboardState currentKeyboardState, KeyboardState previousKeyboardState)
+    public void Update(
+        GameTime gameTime,
+        KeyboardState currentKeyboardState,
+        KeyboardState previousKeyboardState,
+        in MouseFrameSnapshot mouseSnapshot)
     {
-        _queueRandomSplitButton.Update(gameTime);
+        _queueRandomSplitButton.Update(gameTime, mouseSnapshot);
 
         if (WasKeyJustPressed(Keys.S, currentKeyboardState, previousKeyboardState))
             QueueRandomSplitNextHand();

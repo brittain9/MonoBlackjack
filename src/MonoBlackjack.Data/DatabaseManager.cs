@@ -48,6 +48,7 @@ public sealed class DatabaseManager
         EnsureBaseSchema(connection);
         EnsureMoneyColumnsUseMinorUnits(connection);
         EnsureHandResultPlayerBustedColumn(connection);
+        EnsureRoundForeignKeysUseCurrentRoundTable(connection);
     }
 
     private static void EnsureBaseSchema(SqliteConnection connection)
@@ -384,6 +385,192 @@ public sealed class DatabaseManager
             CREATE INDEX IF NOT EXISTS IX_Decision_Action ON Decision(Action);
             CREATE INDEX IF NOT EXISTS IX_Decision_PlayerValue ON Decision(PlayerValue);
             CREATE INDEX IF NOT EXISTS IX_Decision_DealerUpcard ON Decision(DealerUpcard);
+            """;
+        command.ExecuteNonQuery();
+    }
+
+    private static void EnsureRoundForeignKeysUseCurrentRoundTable(SqliteConnection connection)
+    {
+        bool handResultUsesRound = ForeignKeyTargetsTable(connection, "HandResult", "Round");
+        bool cardSeenUsesRound = ForeignKeyTargetsTable(connection, "CardSeen", "Round");
+        bool decisionUsesRound = ForeignKeyTargetsTable(connection, "Decision", "Round");
+
+        if (handResultUsesRound && cardSeenUsesRound && decisionUsesRound)
+            return;
+
+        using (var disableForeignKeys = connection.CreateCommand())
+        {
+            disableForeignKeys.CommandText = "PRAGMA foreign_keys = OFF;";
+            disableForeignKeys.ExecuteNonQuery();
+        }
+
+        using var transaction = connection.BeginTransaction();
+        try
+        {
+            if (!handResultUsesRound)
+                RebuildHandResultWithRoundForeignKey(connection, transaction);
+
+            if (!cardSeenUsesRound)
+                RebuildCardSeenWithRoundForeignKey(connection, transaction);
+
+            if (!decisionUsesRound)
+                RebuildDecisionWithRoundForeignKey(connection, transaction);
+
+            EnsureIndexes(connection, transaction);
+            transaction.Commit();
+        }
+        catch
+        {
+            transaction.Rollback();
+            throw;
+        }
+        finally
+        {
+            using var enableForeignKeys = connection.CreateCommand();
+            enableForeignKeys.CommandText = "PRAGMA foreign_keys = ON;";
+            enableForeignKeys.ExecuteNonQuery();
+        }
+    }
+
+    private static bool ForeignKeyTargetsTable(SqliteConnection connection, string tableName, string expectedTargetTable)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = $"PRAGMA foreign_key_list({tableName});";
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            if (string.Equals(reader.GetString(2), expectedTargetTable, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static void RebuildHandResultWithRoundForeignKey(SqliteConnection connection, SqliteTransaction transaction)
+    {
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            DROP TABLE IF EXISTS HandResult_legacy_round_fk;
+            ALTER TABLE HandResult RENAME TO HandResult_legacy_round_fk;
+
+            CREATE TABLE HandResult (
+                Id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                RoundId      INTEGER NOT NULL REFERENCES Round(Id),
+                HandIndex    INTEGER NOT NULL,
+                Outcome      TEXT NOT NULL,
+                Payout       INTEGER NOT NULL,
+                PlayerBusted INTEGER NOT NULL DEFAULT 0
+            );
+
+            INSERT INTO HandResult (
+                Id,
+                RoundId,
+                HandIndex,
+                Outcome,
+                Payout,
+                PlayerBusted
+            )
+            SELECT
+                Id,
+                RoundId,
+                HandIndex,
+                Outcome,
+                Payout,
+                COALESCE(PlayerBusted, 0)
+            FROM HandResult_legacy_round_fk;
+
+            DROP TABLE HandResult_legacy_round_fk;
+            """;
+        command.ExecuteNonQuery();
+    }
+
+    private static void RebuildCardSeenWithRoundForeignKey(SqliteConnection connection, SqliteTransaction transaction)
+    {
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            DROP TABLE IF EXISTS CardSeen_legacy_round_fk;
+            ALTER TABLE CardSeen RENAME TO CardSeen_legacy_round_fk;
+
+            CREATE TABLE CardSeen (
+                Id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                RoundId     INTEGER NOT NULL REFERENCES Round(Id),
+                Recipient   TEXT NOT NULL,
+                HandIndex   INTEGER NOT NULL,
+                Rank        TEXT NOT NULL,
+                Suit        TEXT NOT NULL,
+                FaceDown    INTEGER NOT NULL
+            );
+
+            INSERT INTO CardSeen (
+                Id,
+                RoundId,
+                Recipient,
+                HandIndex,
+                Rank,
+                Suit,
+                FaceDown
+            )
+            SELECT
+                Id,
+                RoundId,
+                Recipient,
+                HandIndex,
+                Rank,
+                Suit,
+                FaceDown
+            FROM CardSeen_legacy_round_fk;
+
+            DROP TABLE CardSeen_legacy_round_fk;
+            """;
+        command.ExecuteNonQuery();
+    }
+
+    private static void RebuildDecisionWithRoundForeignKey(SqliteConnection connection, SqliteTransaction transaction)
+    {
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            DROP TABLE IF EXISTS Decision_legacy_round_fk;
+            ALTER TABLE Decision RENAME TO Decision_legacy_round_fk;
+
+            CREATE TABLE Decision (
+                Id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                RoundId         INTEGER NOT NULL REFERENCES Round(Id),
+                HandIndex       INTEGER NOT NULL,
+                PlayerValue     INTEGER NOT NULL,
+                IsSoft          INTEGER NOT NULL,
+                DealerUpcard    TEXT NOT NULL,
+                Action          TEXT NOT NULL,
+                ResultOutcome   TEXT,
+                ResultPayout    INTEGER
+            );
+
+            INSERT INTO Decision (
+                Id,
+                RoundId,
+                HandIndex,
+                PlayerValue,
+                IsSoft,
+                DealerUpcard,
+                Action,
+                ResultOutcome,
+                ResultPayout
+            )
+            SELECT
+                Id,
+                RoundId,
+                HandIndex,
+                PlayerValue,
+                IsSoft,
+                DealerUpcard,
+                Action,
+                ResultOutcome,
+                ResultPayout
+            FROM Decision_legacy_round_fk;
+
+            DROP TABLE Decision_legacy_round_fk;
             """;
         command.ExecuteNonQuery();
     }

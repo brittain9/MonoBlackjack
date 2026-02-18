@@ -10,7 +10,11 @@ internal interface IDevMenuTool
 
     void HandleResize(Rectangle panelBounds, Vector2 buttonSize);
 
-    void Update(GameTime gameTime, KeyboardState currentKeyboardState, KeyboardState previousKeyboardState);
+    void Update(
+        GameTime gameTime,
+        KeyboardState currentKeyboardState,
+        KeyboardState previousKeyboardState,
+        in MouseFrameSnapshot mouseSnapshot);
 
     void Draw(GameTime gameTime, SpriteBatch spriteBatch, SpriteFont font, Rectangle panelBounds, float textScale);
 }

@@ -1,7 +1,6 @@
-﻿using System;
+using System;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using Microsoft.Xna.Framework.Input;
 
 namespace MonoBlackjack
 {
@@ -11,10 +10,8 @@ namespace MonoBlackjack
     /// </summary>
     public class Button : MonoBlackjack.Component
     {
-        private MouseState _currentMouse;
         private readonly SpriteFont _font;
         private bool _isHovering;
-        private MouseState _previousMouse;
         private readonly Texture2D _texture;
         private Vector2 _size;
         private string _text = string.Empty;
@@ -25,11 +22,13 @@ namespace MonoBlackjack
 
         public event EventHandler? Click;
         public bool Clicked { get; private set; }
-        public Color PenColor { get;set; }
+        public Color PenColor { get; set; }
+
         /// <summary>
         /// Center-anchor screen position.
         /// </summary>
         public Vector2 Position { get; set; }
+
         public Vector2 Size
         {
             get => _size;
@@ -42,6 +41,7 @@ namespace MonoBlackjack
                 _textLayoutDirty = true;
             }
         }
+
         public Rectangle DestRect
         {
             get
@@ -54,6 +54,7 @@ namespace MonoBlackjack
                     (int)Size.Y);
             }
         }
+
         public string Text
         {
             get => _text;
@@ -67,7 +68,8 @@ namespace MonoBlackjack
                 _textLayoutDirty = true;
             }
         }
-        public Texture2D Texture { get { return _texture; } }
+
+        public Texture2D Texture => _texture;
 
         public Button(Texture2D texture, SpriteFont font)
         {
@@ -136,23 +138,13 @@ namespace MonoBlackjack
             _textLayoutDirty = false;
         }
 
-        public override void Update(GameTime gameTime)
+        public override void Update(GameTime gameTime, in MouseFrameSnapshot mouseSnapshot)
         {
-            _previousMouse = _currentMouse;
-            _currentMouse = Mouse.GetState();
+            _isHovering = mouseSnapshot.CursorRect.Intersects(DestRect);
+            Clicked = _isHovering && mouseSnapshot.LeftReleasedThisFrame;
 
-            var mouseRectangle = new Rectangle(_currentMouse.X, _currentMouse.Y, 1, 1);
-            _isHovering = false;
-
-            if (mouseRectangle.Intersects(DestRect))
-            {
-                _isHovering = true;
-
-                if(_currentMouse.LeftButton == ButtonState.Released && _previousMouse.LeftButton == ButtonState.Pressed)
-                {
-                    Click?.Invoke(this, new EventArgs());
-                }
-            }
+            if (Clicked)
+                Click?.Invoke(this, EventArgs.Empty);
         }
     }
 }

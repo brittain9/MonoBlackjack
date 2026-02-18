@@ -52,7 +52,11 @@ internal sealed class DevMenuOverlay
         LayoutToolSections();
     }
 
-    public void Update(GameTime gameTime, KeyboardState currentKeyboardState, KeyboardState previousKeyboardState)
+    public void Update(
+        GameTime gameTime,
+        KeyboardState currentKeyboardState,
+        KeyboardState previousKeyboardState,
+        in MouseFrameSnapshot mouseSnapshot)
     {
         if (!IsOpen)
             return;
@@ -60,7 +64,7 @@ internal sealed class DevMenuOverlay
         SyncLayoutToCurrentViewport();
 
         for (int i = 0; i < _tools.Count; i++)
-            _tools[i].Update(gameTime, currentKeyboardState, previousKeyboardState);
+            _tools[i].Update(gameTime, currentKeyboardState, previousKeyboardState, mouseSnapshot);
     }
 
     public void Draw(GameTime gameTime, SpriteBatch spriteBatch, Texture2D pixelTexture, SpriteFont font, float textScale)

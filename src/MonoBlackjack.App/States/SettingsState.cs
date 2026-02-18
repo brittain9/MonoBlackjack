@@ -118,6 +118,7 @@ internal sealed class SettingsState : State
     public override void Update(GameTime gameTime)
     {
         CaptureKeyboardState();
+        var mouseSnapshot = CaptureMouseSnapshot();
 
         if (_capturingKeybindKey is not null)
         {
@@ -126,20 +127,21 @@ internal sealed class SettingsState : State
         else if (WasBackKeyPressed())
         {
             _game.GoBack();
+            CommitMouseState();
             CommitKeyboardState();
             return;
         }
 
         foreach (var button in _tabButtons)
-            button.Update(gameTime);
+            button.Update(gameTime, mouseSnapshot);
 
         foreach (var button in _actionButtons)
-            button.Update(gameTime);
+            button.Update(gameTime, mouseSnapshot);
 
         foreach (var row in GetVisibleRows())
         {
-            row.PreviousButton.Update(gameTime);
-            row.NextButton.Update(gameTime);
+            row.PreviousButton.Update(gameTime, mouseSnapshot);
+            row.NextButton.Update(gameTime, mouseSnapshot);
         }
 
         if (_statusSeconds > 0f)
@@ -149,6 +151,7 @@ internal sealed class SettingsState : State
                 _statusMessage = string.Empty;
         }
 
+        CommitMouseState();
         CommitKeyboardState();
     }
 

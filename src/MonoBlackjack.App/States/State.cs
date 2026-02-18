@@ -12,6 +12,9 @@ namespace MonoBlackjack
         protected BlackjackGame _game;
         protected KeyboardState _currentKeyboardState;
         protected KeyboardState _previousKeyboardState;
+        protected MouseState _currentMouseState;
+        protected MouseState _previousMouseState;
+        private bool _hasMouseStateSnapshot;
 
         public abstract void Draw(GameTime gameTime, SpriteBatch spriteBatch);
         public abstract void PostUpdate(GameTime gameTime);
@@ -30,9 +33,26 @@ namespace MonoBlackjack
             _currentKeyboardState = Keyboard.GetState();
         }
 
+        protected MouseFrameSnapshot CaptureMouseSnapshot()
+        {
+            _currentMouseState = Mouse.GetState();
+            if (!_hasMouseStateSnapshot)
+            {
+                _previousMouseState = _currentMouseState;
+                _hasMouseStateSnapshot = true;
+            }
+
+            return new MouseFrameSnapshot(_currentMouseState, _previousMouseState);
+        }
+
         protected void CommitKeyboardState()
         {
             _previousKeyboardState = _currentKeyboardState;
+        }
+
+        protected void CommitMouseState()
+        {
+            _previousMouseState = _currentMouseState;
         }
 
         protected bool WasKeyJustPressed(Keys key)

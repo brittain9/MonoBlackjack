@@ -550,6 +550,7 @@ internal class GameState : State
     public override void Update(GameTime gameTime)
     {
         CaptureKeyboardState();
+        var mouseSnapshot = CaptureMouseSnapshot();
         float deltaSeconds = (float)gameTime.ElapsedGameTime.TotalSeconds;
         TickWarning(deltaSeconds);
 
@@ -567,8 +568,9 @@ internal class GameState : State
             if (pausePressed || backPressed)
                 _devMenu.Close();
             else
-                _devMenu.Update(gameTime, _currentKeyboardState, _previousKeyboardState);
+                _devMenu.Update(gameTime, _currentKeyboardState, _previousKeyboardState, mouseSnapshot);
 
+            CommitMouseState();
             CommitKeyboardState();
             return;
         }
@@ -576,7 +578,8 @@ internal class GameState : State
         _pauseController.HandlePauseBackInput(pausePressed, backPressed);
         if (_pauseController.IsPaused)
         {
-            _pauseController.Update(gameTime);
+            _pauseController.Update(gameTime, mouseSnapshot);
+            CommitMouseState();
             CommitKeyboardState();
             return;
         }
@@ -584,12 +587,13 @@ internal class GameState : State
         if (_gamePhase == GamePhase.Betting)
         {
             ExecutePhaseCommand(_inputController.ResolveBettingCommand(_keybinds, _currentKeyboardState, _previousKeyboardState));
-            _betDownButton.Update(gameTime);
-            _betUpButton.Update(gameTime);
-            _dealButton.Update(gameTime);
+            _betDownButton.Update(gameTime, mouseSnapshot);
+            _betUpButton.Update(gameTime, mouseSnapshot);
+            _dealButton.Update(gameTime, mouseSnapshot);
             if (_lastBet > 0)
-                _repeatBetButton.Update(gameTime);
+                _repeatBetButton.Update(gameTime, mouseSnapshot);
 
+            CommitMouseState();
             CommitKeyboardState();
             return;
         }
@@ -597,9 +601,10 @@ internal class GameState : State
         if (_gamePhase == GamePhase.Bankrupt)
         {
             ExecutePhaseCommand(_inputController.ResolveBankruptCommand(_keybinds, _currentKeyboardState, _previousKeyboardState));
-            _resetBankrollButton.Update(gameTime);
-            _menuButton.Update(gameTime);
+            _resetBankrollButton.Update(gameTime, mouseSnapshot);
+            _menuButton.Update(gameTime, mouseSnapshot);
 
+            CommitMouseState();
             CommitKeyboardState();
             return;
         }
@@ -611,13 +616,13 @@ internal class GameState : State
             ExecutePhaseCommand(_inputController.ResolvePlayerTurnCommand(_keybinds, _currentKeyboardState, _previousKeyboardState));
             LayoutActionButtons();
             foreach (var button in GetVisibleActionButtons())
-                button.Update(gameTime);
+                button.Update(gameTime, mouseSnapshot);
         }
         else if (IsInsuranceInteractionEnabled())
         {
             ExecutePhaseCommand(_inputController.ResolveInsuranceCommand(_keybinds, _currentKeyboardState, _previousKeyboardState));
-            _insuranceButton.Update(gameTime);
-            _declineInsuranceButton.Update(gameTime);
+            _insuranceButton.Update(gameTime, mouseSnapshot);
+            _declineInsuranceButton.Update(gameTime, mouseSnapshot);
         }
 
         _tweenManager.Update(deltaSeconds);
@@ -637,6 +642,7 @@ internal class GameState : State
         }
 
         _sceneRenderer.Update(gameTime);
+        CommitMouseState();
         CommitKeyboardState();
     }
 

@@ -84,14 +84,18 @@ internal sealed class CardSelectorTool : IDevMenuTool
         _helperPosition = new Vector2(centerX, firstRowY + rowGap * 3f + 6f);
     }
 
-    public void Update(GameTime gameTime, KeyboardState currentKeyboardState, KeyboardState previousKeyboardState)
+    public void Update(
+        GameTime gameTime,
+        KeyboardState currentKeyboardState,
+        KeyboardState previousKeyboardState,
+        in MouseFrameSnapshot mouseSnapshot)
     {
-        _rankLeftButton.Update(gameTime);
-        _rankRightButton.Update(gameTime);
-        _suitLeftButton.Update(gameTime);
-        _suitRightButton.Update(gameTime);
-        _queueSelectedCardButton.Update(gameTime);
-        _clearQueueButton.Update(gameTime);
+        _rankLeftButton.Update(gameTime, mouseSnapshot);
+        _rankRightButton.Update(gameTime, mouseSnapshot);
+        _suitLeftButton.Update(gameTime, mouseSnapshot);
+        _suitRightButton.Update(gameTime, mouseSnapshot);
+        _queueSelectedCardButton.Update(gameTime, mouseSnapshot);
+        _clearQueueButton.Update(gameTime, mouseSnapshot);
 
         if (WasKeyJustPressed(Keys.Left, currentKeyboardState, previousKeyboardState))
             MoveRank(-1);

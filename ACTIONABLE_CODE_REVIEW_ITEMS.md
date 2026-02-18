@@ -10,29 +10,13 @@ Status: Ready for implementation
 3. **Fix dealer hole-card analytics undercount**
 4. **Correct bust-rate computation**
 
-## P1 - Product Integrity + Architecture
+## P1 - Product Integrity + Architecture (COMPLETE)
 
 5. **Wire or remove currently dead settings**
 6. **Replace swallowed stats persistence errors**
 7. **Eliminate money precision drift risk**
-
 8. **Decompose `GameState` orchestration class**
-   - Problem: state contains input, rendering, animation, pause flow, and round orchestration in one class.
-   - Actions:
-     - Extract focused collaborators (input controller, pause controller, animation coordinator, HUD/presenter).
-     - Keep `GameState` as composition root.
-   - Files:
-     - `src/MonoBlackjack.App/States/GameState.cs`
-     - `tests/MonoBlackjack.App.Tests/StateAndSettingsTests.cs`
-
 9. **Decompose `StatsState` rendering and interaction**
-   - Problem: one class owns all analysis rendering and interaction logic.
-   - Actions:
-     - Extract overview panel renderer, analysis panel renderer, and matrix renderer.
-     - Keep data loading and mode switching in coordinator only.
-   - Files:
-     - `src/MonoBlackjack.App/States/StatsState.cs`
-     - `tests/MonoBlackjack.App.Tests/StatsDashboardTests.cs`
 
 ## P2 - Performance + Cleanup
 

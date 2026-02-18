@@ -1,7 +1,6 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Content;
 using Microsoft.Xna.Framework.Graphics;
-using Microsoft.Xna.Framework.Input;
 using MonoBlackjack.Core.Ports;
 
 namespace MonoBlackjack;
@@ -31,7 +30,6 @@ internal sealed class StatsState : State
 
     private float _scrollOffset;
     private float _maxScroll;
-    private int _previousScrollValue;
 
     private OverviewStats _overview = null!;
     private IReadOnlyList<BankrollPoint> _bankrollHistory = [];
@@ -58,8 +56,6 @@ internal sealed class StatsState : State
         _overviewRenderer = new StatsOverviewPanelRenderer(_font, _pixelTexture, _graphicsDevice, GetResponsiveScale);
         var matrixRenderer = new StatsMatrixRenderer(_font, _pixelTexture, _graphicsDevice, GetResponsiveScale);
         _analysisRenderer = new StatsAnalysisPanelRenderer(_font, _pixelTexture, _graphicsDevice, GetResponsiveScale, matrixRenderer);
-
-        _previousScrollValue = Mouse.GetState().ScrollWheelValue;
 
         _overviewTab = new Button(_buttonTexture, _font) { Text = "Overview", PenColor = Color.Black };
         _overviewTab.Click += (_, _) => { _activeTab = StatsTab.Overview; _scrollOffset = 0; };
@@ -134,34 +130,30 @@ internal sealed class StatsState : State
     public override void Update(GameTime gameTime)
     {
         CaptureKeyboardState();
+        var mouseSnapshot = CaptureMouseSnapshot();
 
         if (_keybinds.IsJustPressed(InputAction.Back, _currentKeyboardState, _previousKeyboardState))
         {
             _game.GoBack();
+            CommitMouseState();
             CommitKeyboardState();
             return;
         }
 
         foreach (var button in _buttons)
-            button.Update(gameTime);
+            button.Update(gameTime, mouseSnapshot);
 
         if (_activeTab == StatsTab.Analysis)
         {
-            var mouseState = Mouse.GetState();
-            int scrollDelta = mouseState.ScrollWheelValue - _previousScrollValue;
-            _previousScrollValue = mouseState.ScrollWheelValue;
-
+            int scrollDelta = mouseSnapshot.ScrollDelta;
             if (scrollDelta != 0)
             {
                 _scrollOffset -= scrollDelta * 0.3f;
                 _scrollOffset = MathHelper.Clamp(_scrollOffset, 0f, _maxScroll);
             }
         }
-        else
-        {
-            _previousScrollValue = Mouse.GetState().ScrollWheelValue;
-        }
 
+        CommitMouseState();
         CommitKeyboardState();
     }
 
