@@ -36,10 +36,32 @@ internal static class UIConstants
     public const float MaxActionButtonsVerticalGap = 14f;
     public const float ActionButtonsBottomInsetRatio = 0.75f;
 
-    public const float BetCenterYRatio = 0.5f;
-    public const float BetArrowWidthToActionButtonHeightRatio = 1.2f;
-    public const float BetArrowSpacingToActionButtonWidthRatio = 0.8f;
-    public const float DealButtonOffsetRatio = 0.08f;
-    public const float RepeatBetButtonOffsetRatio = 0.14f;
+    public const float BetPanelHeightToActionButtonHeightRatio = 5.2f;
+    public const float BetArrowSizeToActionButtonHeightRatio = 0.95f;
+    public const float BetArrowVerticalOffsetToActionButtonHeightRatio = 1.05f;
+    public const float DealButtonVerticalOffsetRatio = 0.0f;
+    public const float RepeatBetButtonVerticalOffsetRatio = 0.13f;
+    public const float BetPanelAmountOffsetToActionButtonHeightRatio = 1.55f;
+    public const float BetPanelLabelOffsetToActionButtonHeightRatio = 2.2f;
     public const float BankruptButtonsYRatio = 0.55f;
+
+    public const float BetPanelPreferredRightYRatio = 0.66f;
+    public const float BetPanelRightInsetRatio = 0.02f;
+    public const float BetPanelBottomInsetRatio = 0.03f;
+    public const float BetPanelMinGameplayWidthRatio = 0.68f;
+    public const int BetPanelRightRailMinViewportHeight = 620;
+    public const float BetPanelSafeGapToTableRatio = 0.02f;
+
+    public const float TableArcHalfSweepDegrees = 62f;
+    public const float TableTopGapRatio = 0.03f;
+    public const float TableBottomGapRatio = 0.045f;
+    public const float TableMinTopGap = 14f;
+    public const float TableMaxTopGap = 36f;
+    public const float TableMinBottomGap = 18f;
+    public const float TableMaxBottomGap = 46f;
+    public const float TableMinOuterRadiusRatio = 0.19f;
+    public const float TableMaxOuterRadiusRatio = 0.4f;
+    public const float TableMiddleRadiusRatio = 0.84f;
+    public const float TableInnerRadiusRatio = 0.69f;
+    public const float TableSideInsetRatio = 0.02f;
 }

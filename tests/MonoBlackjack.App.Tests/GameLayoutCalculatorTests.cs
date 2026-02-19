@@ -568,4 +568,142 @@ public class GameLayoutCalculatorTests
             secondLeft >= firstRight - 0.001f,
             $"Expected adaptive split layout to avoid overlap for {viewportWidth}x{viewportHeight}: firstRight={firstRight}, secondLeft={secondLeft}");
     }
+
+    [Theory]
+    [InlineData(1280, 720)]
+    [InlineData(1536, 864)]
+    [InlineData(1920, 1080)]
+    [InlineData(2560, 1440)]
+    public void CalculateGameSurfaceLayout_RightRailMode_AvoidsTablePanelOverlap(int viewportWidth, int viewportHeight)
+    {
+        var cardSize = GameLayoutCalculator.CalculateCardSize(viewportHeight);
+        var actionPadding = GameLayoutCalculator.CalculateActionButtonPadding(viewportWidth);
+        var actionButtonSize = GameLayoutCalculator.CalculateActionButtonSize(viewportWidth, cardSize, actionPadding);
+
+        var layout = GameLayoutCalculator.CalculateGameSurfaceLayout(
+            viewportWidth,
+            viewportHeight,
+            actionButtonSize,
+            actionPadding);
+
+        Assert.Equal(BetPanelPlacementMode.RightRail, layout.BetPanel.PlacementMode);
+        Assert.True(layout.Table.RightEdgeX < layout.BetPanel.PanelRect.Left);
+        Assert.True(layout.Table.RightEdgeX <= layout.GameplayBounds.Right + 0.001f);
+        Assert.True(layout.Table.LeftEdgeX >= layout.GameplayBounds.Left - 0.001f);
+    }
+
+    [Theory]
+    [InlineData(800, 600)]
+    [InlineData(960, 540)]
+    public void CalculateGameSurfaceLayout_NarrowViewport_FallsBackToBottomCenter(int viewportWidth, int viewportHeight)
+    {
+        var cardSize = GameLayoutCalculator.CalculateCardSize(viewportHeight);
+        var actionPadding = GameLayoutCalculator.CalculateActionButtonPadding(viewportWidth);
+        var actionButtonSize = GameLayoutCalculator.CalculateActionButtonSize(viewportWidth, cardSize, actionPadding);
+
+        var layout = GameLayoutCalculator.CalculateGameSurfaceLayout(
+            viewportWidth,
+            viewportHeight,
+            actionButtonSize,
+            actionPadding);
+
+        Assert.Equal(BetPanelPlacementMode.BottomCenter, layout.BetPanel.PlacementMode);
+        Assert.True(layout.BetPanel.PanelRect.Top >= layout.GameplayBounds.Bottom);
+        Assert.True(layout.BetPanel.PanelRect.Left >= 0);
+        Assert.True(layout.BetPanel.PanelRect.Right <= viewportWidth);
+    }
+
+    [Theory]
+    [InlineData(800, 600)]
+    [InlineData(1280, 720)]
+    [InlineData(1920, 1080)]
+    public void CalculateGameSurfaceLayout_TableArc_IsTopAnchoredSymmetric(int viewportWidth, int viewportHeight)
+    {
+        var cardSize = GameLayoutCalculator.CalculateCardSize(viewportHeight);
+        var actionPadding = GameLayoutCalculator.CalculateActionButtonPadding(viewportWidth);
+        var actionButtonSize = GameLayoutCalculator.CalculateActionButtonSize(viewportWidth, cardSize, actionPadding);
+
+        var layout = GameLayoutCalculator.CalculateGameSurfaceLayout(
+            viewportWidth,
+            viewportHeight,
+            actionButtonSize,
+            actionPadding);
+
+        float topAnchor = layout.Table.TopAnchorRadians;
+        float expectedTop = MathHelper.ToRadians(270f);
+        Assert.InRange(topAnchor, expectedTop - 0.0001f, expectedTop + 0.0001f);
+
+        float leftSweep = topAnchor - layout.Table.ArcStartRadians;
+        float rightSweep = layout.Table.ArcEndRadians - topAnchor;
+        Assert.InRange(MathF.Abs(leftSweep - rightSweep), 0f, 0.0001f);
+
+        float leftY = layout.Table.Center.Y + MathF.Sin(layout.Table.ArcStartRadians) * layout.Table.OuterRadius;
+        float rightY = layout.Table.Center.Y + MathF.Sin(layout.Table.ArcEndRadians) * layout.Table.OuterRadius;
+        Assert.InRange(MathF.Abs(leftY - rightY), 0f, 0.001f);
+        Assert.True(layout.Table.TopEdgeY < leftY);
+    }
+
+    [Theory]
+    [InlineData(800, 600)]
+    [InlineData(1280, 720)]
+    [InlineData(1920, 1080)]
+    public void CalculateGameSurfaceLayout_BetPanelAnchorsStayInsidePanel(int viewportWidth, int viewportHeight)
+    {
+        var cardSize = GameLayoutCalculator.CalculateCardSize(viewportHeight);
+        var actionPadding = GameLayoutCalculator.CalculateActionButtonPadding(viewportWidth);
+        var actionButtonSize = GameLayoutCalculator.CalculateActionButtonSize(viewportWidth, cardSize, actionPadding);
+        var layout = GameLayoutCalculator.CalculateGameSurfaceLayout(
+            viewportWidth,
+            viewportHeight,
+            actionButtonSize,
+            actionPadding);
+
+        var panelRect = layout.BetPanel.PanelRect;
+        var center = layout.BetPanel.PanelCenter;
+        var arrowSize = actionButtonSize.Y * UIConstants.BetArrowSizeToActionButtonHeightRatio;
+        var arrowOffset = actionButtonSize.Y * UIConstants.BetArrowVerticalOffsetToActionButtonHeightRatio;
+
+        var upButton = CreateCenteredRect(center.X, center.Y - arrowOffset, arrowSize, arrowSize);
+        var downButton = CreateCenteredRect(center.X, center.Y + arrowOffset, arrowSize, arrowSize);
+        var dealButton = CreateCenteredRect(center.X, center.Y + viewportHeight * UIConstants.DealButtonVerticalOffsetRatio, actionButtonSize.X, actionButtonSize.Y);
+        var repeatButton = CreateCenteredRect(center.X, center.Y + viewportHeight * UIConstants.RepeatBetButtonVerticalOffsetRatio, actionButtonSize.X, actionButtonSize.Y);
+
+        Assert.True(panelRect.Contains(upButton));
+        Assert.True(panelRect.Contains(downButton));
+        Assert.True(panelRect.Contains(dealButton));
+        Assert.True(panelRect.Contains(repeatButton));
+    }
+
+    [Theory]
+    [InlineData(800, 600)]
+    [InlineData(1280, 720)]
+    [InlineData(1920, 1080)]
+    public void CalculateGameSurfaceLayout_IsDeterministic(int viewportWidth, int viewportHeight)
+    {
+        var cardSize = GameLayoutCalculator.CalculateCardSize(viewportHeight);
+        var actionPadding = GameLayoutCalculator.CalculateActionButtonPadding(viewportWidth);
+        var actionButtonSize = GameLayoutCalculator.CalculateActionButtonSize(viewportWidth, cardSize, actionPadding);
+
+        var first = GameLayoutCalculator.CalculateGameSurfaceLayout(
+            viewportWidth,
+            viewportHeight,
+            actionButtonSize,
+            actionPadding);
+        var second = GameLayoutCalculator.CalculateGameSurfaceLayout(
+            viewportWidth,
+            viewportHeight,
+            actionButtonSize,
+            actionPadding);
+
+        Assert.Equal(first, second);
+    }
+
+    private static Rectangle CreateCenteredRect(float centerX, float centerY, float width, float height)
+    {
+        return new Rectangle(
+            (int)MathF.Round(centerX - width / 2f),
+            (int)MathF.Round(centerY - height / 2f),
+            (int)MathF.Round(width),
+            (int)MathF.Round(height));
+    }
 }

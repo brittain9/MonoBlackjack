@@ -236,10 +236,25 @@ internal sealed class StatsState : State
     {
         var vp = _graphicsDevice.Viewport;
         const string title = "Statistics";
+        const string subtitle = "Experimental Analytics";
         float scale = GetResponsiveScale(1.0f);
         var size = _font.MeasureString(title) * scale;
-        sb.DrawString(_font, title, new Vector2(vp.Width / 2f - size.X / 2f, vp.Height * 0.015f),
+        float titleY = vp.Height * 0.012f;
+        sb.DrawString(_font, title, new Vector2(vp.Width / 2f - size.X / 2f, titleY),
             StatsStyle.PrimaryText, 0f, Vector2.Zero, scale, SpriteEffects.None, 0f);
+
+        float subtitleScale = GetResponsiveScale(0.5f);
+        var subtitleSize = _font.MeasureString(subtitle) * subtitleScale;
+        sb.DrawString(
+            _font,
+            subtitle,
+            new Vector2(vp.Width / 2f - subtitleSize.X / 2f, titleY + size.Y + 2f),
+            Color.Orange,
+            0f,
+            Vector2.Zero,
+            subtitleScale,
+            SpriteEffects.None,
+            0f);
     }
 
     private void DrawTabButtons(GameTime gameTime, SpriteBatch sb)

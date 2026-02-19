@@ -11,6 +11,12 @@ Primary goals:
 - Strong analytics/data capture
 - Clean architecture and maintainable code
 
+## Current Product Priority
+- Gameplay and rule correctness are the primary shipping priority.
+- The statistics dashboard (`StatsState`) is currently experimental and expected to be overhauled after core gameplay is fully correct.
+- Treat current analytics visualizations as non-authoritative training output while this phase is active.
+- Prefer preserving trustworthy raw data capture over polishing derived stats UX/queries.
+
 ## Architecture
 Solution structure:
 - `src/MonoBlackjack.Core`: domain model, rules engine, round flow, domain events, interfaces/ports
@@ -51,7 +57,7 @@ Implications:
 
 ## Data/Persistence Notes
 - SQLite is the persistence backend.
-- Migrations are managed in data layer startup (`DatabaseManager.RunMigrations()` in current implementation).
+- Schema initialization and migrations are managed in data layer startup (`DatabaseManager` schema ensure/migration path).
 - Store full round/rule context needed for analytics queries.
 - Since backward compatibility is not required, schema evolves for clarity and correctness over legacy support.
 

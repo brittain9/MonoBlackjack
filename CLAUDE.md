@@ -1,7 +1,7 @@
 # MonoBlackjack - Project Context
 
 ## What This Is
-Casino-grade blackjack simulator with SQLite-backed analytics. Not just a game — a data tool for strategy analysis with configurable rules, detailed stats tracking, and strategy matrix visualization.
+Casino-grade blackjack simulator with SQLite-backed analytics. Gameplay/rules fidelity is the primary target; stats visualization is currently experimental and will be overhauled after gameplay correctness is complete.
 
 ## Architecture
 
@@ -19,7 +19,12 @@ MonoBlackjack.App    → MonoGame UI, EventBus, state machine, rendering
 ## Tech Stack
 - .NET 10, MonoGame 3.8.4.1 (DesktopGL)
 - SQLite (Microsoft.Data.Sqlite)
-- xUnit + FluentAssertions (94 tests, all passing)
+- xUnit + FluentAssertions (200+ tests, all passing)
+
+## Current Priority
+- Ship correct blackjack behavior first (rules, round flow, bankroll correctness).
+- Keep analytics capture reliable, but treat current stats/strategy dashboards as non-authoritative.
+- Stats page wording and UX should clearly signal experimental status until the planned refresh.
 
 ## Build & Run
 ```bash
@@ -46,7 +51,7 @@ dotnet run --project src/MonoBlackjack.App
 - **Location:** `~/.local/share/MonoBlackjack/monoblackjack.db`
 - **Schema:** Profile → Session → Round → HandResult/CardSeen/Decision
 - **Rule fingerprint:** BlackjackPayout, DealerHitsS17, DeckCount, SurrenderRule stored per round
-- **Migrations:** Handled in DatabaseManager.RunMigrations()
+- **Migrations:** Handled in `DatabaseManager` schema ensure/migration startup path
 
 ## Important Files
 - `GameRound.cs` (572 lines) — Round orchestration, all game actions (Hit/Stand/Split/Double/Surrender)

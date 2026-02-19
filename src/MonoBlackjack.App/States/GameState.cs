@@ -36,6 +36,7 @@ internal class GameState : State
     private readonly GamePauseController _pauseController;
     private readonly GameAnimationCoordinator _animationCoordinator;
     private readonly GameHudPresenter _hudPresenter;
+    private readonly BlackjackTableRenderer _tableRenderer;
 
     private readonly Button _hitButton;
     private readonly Button _standButton;
@@ -73,6 +74,7 @@ internal class GameState : State
     private Vector2 _actionButtonSize;
     private float _actionButtonY;
     private float _actionButtonPadding;
+    private GameSurfaceLayout _surfaceLayout;
 
     public GameState(
         BlackjackGame game,
@@ -124,6 +126,7 @@ internal class GameState : State
             GetResponsiveScale);
 
         _hudPresenter = new GameHudPresenter(_graphicsDevice, _font, _pixelTexture, GetResponsiveScale);
+        _tableRenderer = new BlackjackTableRenderer(_pixelTexture, _font, GetResponsiveScale);
 
         _hitButton = new Button(buttonTexture, _font) { Text = "Hit", PenColor = Color.Black };
         _standButton = new Button(buttonTexture, _font) { Text = "Stand", PenColor = Color.Black };
@@ -133,8 +136,8 @@ internal class GameState : State
         _insuranceButton = new Button(buttonTexture, _font) { Text = "Insurance", PenColor = Color.Black };
         _declineInsuranceButton = new Button(buttonTexture, _font) { Text = "No Thanks", PenColor = Color.Black };
 
-        _betDownButton = new Button(buttonTexture, _font) { Text = "<", PenColor = Color.Black };
-        _betUpButton = new Button(buttonTexture, _font) { Text = ">", PenColor = Color.Black };
+        _betDownButton = new Button(buttonTexture, _font) { Text = "v", PenColor = Color.Black };
+        _betUpButton = new Button(buttonTexture, _font) { Text = "^", PenColor = Color.Black };
         _dealButton = new Button(buttonTexture, _font) { Text = "Deal", PenColor = Color.Black };
         _repeatBetButton = new Button(buttonTexture, _font) { Text = "Repeat Bet", PenColor = Color.Black };
 
@@ -233,21 +236,31 @@ internal class GameState : State
         _insuranceButton.Position = new Vector2(insuranceStartX, _actionButtonY);
         _declineInsuranceButton.Position = new Vector2(insuranceStartX + _actionButtonSize.X + _actionButtonPadding, _actionButtonY);
 
+        _surfaceLayout = GameLayoutCalculator.CalculateGameSurfaceLayout(
+            vp.Width,
+            vp.Height,
+            _actionButtonSize,
+            _actionButtonPadding);
+        var betPanelCenter = _surfaceLayout.BetPanel.PanelCenter;
+
         var arrowSize = new Vector2(
-            _actionButtonSize.Y * UIConstants.BetArrowWidthToActionButtonHeightRatio,
-            _actionButtonSize.Y);
-        var betCenterY = vp.Height * UIConstants.BetCenterYRatio;
-        var betArrowSpacing = _actionButtonSize.X * UIConstants.BetArrowSpacingToActionButtonWidthRatio;
+            _actionButtonSize.Y * UIConstants.BetArrowSizeToActionButtonHeightRatio,
+            _actionButtonSize.Y * UIConstants.BetArrowSizeToActionButtonHeightRatio);
+        var arrowOffset = _actionButtonSize.Y * UIConstants.BetArrowVerticalOffsetToActionButtonHeightRatio;
         _betDownButton.Size = arrowSize;
         _betUpButton.Size = arrowSize;
-        _betDownButton.Position = new Vector2(centerX - betArrowSpacing, betCenterY);
-        _betUpButton.Position = new Vector2(centerX + betArrowSpacing, betCenterY);
+        _betUpButton.Position = new Vector2(betPanelCenter.X, betPanelCenter.Y - arrowOffset);
+        _betDownButton.Position = new Vector2(betPanelCenter.X, betPanelCenter.Y + arrowOffset);
 
         _dealButton.Size = _actionButtonSize;
-        _dealButton.Position = new Vector2(centerX, betCenterY + vp.Height * UIConstants.DealButtonOffsetRatio);
+        _dealButton.Position = new Vector2(
+            betPanelCenter.X,
+            betPanelCenter.Y + vp.Height * UIConstants.DealButtonVerticalOffsetRatio);
 
         _repeatBetButton.Size = _actionButtonSize;
-        _repeatBetButton.Position = new Vector2(centerX, betCenterY + vp.Height * UIConstants.RepeatBetButtonOffsetRatio);
+        _repeatBetButton.Position = new Vector2(
+            betPanelCenter.X,
+            betPanelCenter.Y + vp.Height * UIConstants.RepeatBetButtonVerticalOffsetRatio);
 
         _resetBankrollButton.Size = _actionButtonSize;
         _menuButton.Size = _actionButtonSize;
@@ -650,23 +663,32 @@ internal class GameState : State
     {
         var vp = _graphicsDevice.Viewport;
         bool isBettingMode = _rules.BetFlow == BetFlowMode.Betting;
+        DrawTableSurface(spriteBatch);
 
         if (_gamePhase == GamePhase.Betting)
         {
             spriteBatch.Begin();
             _hudPresenter.DrawHud(spriteBatch, _player.Bank, _gamePhase, _lastBet);
 
-            var betText = $"${_pendingBet}";
-            var betTextScale = GetResponsiveScale(1f);
+            var panelRect = _surfaceLayout.BetPanel.PanelRect;
+            var panelCenter = _surfaceLayout.BetPanel.PanelCenter;
+            spriteBatch.Draw(_pixelTexture, panelRect, new Color(0, 0, 0, 96));
+            spriteBatch.Draw(_pixelTexture, new Rectangle(panelRect.X, panelRect.Y, panelRect.Width, 2), new Color(210, 188, 74));
+
+            var betText = $"BET ${_pendingBet}";
+            var betTextScale = GetResponsiveScale(0.9f);
             var betTextSize = _font.MeasureString(betText) * betTextScale;
-            var betTextPos = new Vector2(vp.Width / 2f - betTextSize.X / 2f, vp.Height * 0.5f - betTextSize.Y / 2f);
+            var betTextPos = new Vector2(
+                panelCenter.X - betTextSize.X / 2f,
+                panelCenter.Y - (_actionButtonSize.Y * UIConstants.BetPanelAmountOffsetToActionButtonHeightRatio));
             spriteBatch.DrawString(_font, betText, betTextPos, Color.Gold, 0f, Vector2.Zero, betTextScale, SpriteEffects.None, 0f);
 
-            const string betLabel = "Place Your Bet";
-            var betLabelScale = GetResponsiveScale(0.8f);
+            const string betLabel = "PLACE YOUR BET";
+            var betLabelScale = GetResponsiveScale(0.62f);
             var labelSize = _font.MeasureString(betLabel) * betLabelScale;
-            var labelYOffset = Math.Max(vp.Height * 0.028f, 12f);
-            var labelPos = new Vector2(vp.Width / 2f - labelSize.X / 2f, vp.Height * 0.5f - betTextSize.Y - labelYOffset);
+            var labelPos = new Vector2(
+                panelCenter.X - labelSize.X / 2f,
+                panelCenter.Y - (_actionButtonSize.Y * UIConstants.BetPanelLabelOffsetToActionButtonHeightRatio));
             spriteBatch.DrawString(_font, betLabel, labelPos, Color.White, 0f, Vector2.Zero, betLabelScale, SpriteEffects.None, 0f);
 
             _betDownButton.Draw(gameTime, spriteBatch);
@@ -779,6 +801,25 @@ internal class GameState : State
             _hudPresenter.DrawWarningBanner(spriteBatch, _warningMessage, _warningSecondsRemaining);
             spriteBatch.End();
         }
+    }
+
+    private void DrawTableSurface(SpriteBatch spriteBatch)
+    {
+        spriteBatch.Begin(
+            SpriteSortMode.Deferred,
+            BlendState.AlphaBlend,
+            SamplerState.LinearClamp,
+            DepthStencilState.None,
+            RasterizerState.CullNone);
+
+        _tableRenderer.Draw(
+            spriteBatch,
+            _surfaceLayout.Table,
+            _rules,
+            _game.RuntimeGraphicsSettings.BackgroundColor,
+            insuranceEnabled: true);
+
+        spriteBatch.End();
     }
 
     private void TickWarning(float deltaSeconds)

@@ -2,6 +2,49 @@ using Microsoft.Xna.Framework;
 
 namespace MonoBlackjack.Layout;
 
+public enum BetPanelPlacementMode
+{
+    RightRail,
+    BottomCenter
+}
+
+public readonly record struct BetPanelLayout(
+    BetPanelPlacementMode PlacementMode,
+    Rectangle PanelRect,
+    Vector2 PanelCenter,
+    float PanelWidth,
+    float PanelHeight);
+
+public readonly record struct TableSurfaceLayout(
+    Rectangle ViewportBounds,
+    Rectangle GameplayBounds,
+    Rectangle ReservedUiBounds,
+    Vector2 Center,
+    float OuterRadius,
+    float MiddleRadius,
+    float InnerRadius,
+    float TopAnchorRadians,
+    float ArcHalfSweepRadians,
+    float DealerCardsBottomY,
+    float PlayerCardsTopY)
+{
+    public float ArcStartRadians => TopAnchorRadians - ArcHalfSweepRadians;
+
+    public float ArcEndRadians => TopAnchorRadians + ArcHalfSweepRadians;
+
+    public float LeftEdgeX => Center.X + MathF.Cos(ArcStartRadians) * OuterRadius;
+
+    public float RightEdgeX => Center.X + MathF.Cos(ArcEndRadians) * OuterRadius;
+
+    public float TopEdgeY => Center.Y - OuterRadius;
+}
+
+public readonly record struct GameSurfaceLayout(
+    Rectangle ViewportBounds,
+    Rectangle GameplayBounds,
+    BetPanelLayout BetPanel,
+    TableSurfaceLayout Table);
+
 /// <summary>
 /// Pure layout math for gameplay UI/card positioning.
 /// Keeps rendering coordinate rules centralized and testable.
@@ -27,6 +70,72 @@ public static class GameLayoutCalculator
     public const float CompressedMinHandGapViewportRatio = 0.01f;
     public const float ActionButtonPaddingRatio = UIConstants.ButtonPaddingRatio;
     public const int MaxActionButtons = UIConstants.MaxActionButtons;
+
+    public static GameSurfaceLayout CalculateGameSurfaceLayout(
+        int viewportWidth,
+        int viewportHeight,
+        Vector2 actionButtonSize,
+        float actionButtonPadding)
+    {
+        if (viewportWidth <= 0)
+            throw new ArgumentOutOfRangeException(nameof(viewportWidth), viewportWidth, "Viewport width must be positive.");
+        if (viewportHeight <= 0)
+            throw new ArgumentOutOfRangeException(nameof(viewportHeight), viewportHeight, "Viewport height must be positive.");
+
+        var viewportBounds = new Rectangle(0, 0, viewportWidth, viewportHeight);
+        float panelWidth = actionButtonSize.X + actionButtonPadding * 2f;
+        float panelHeight = actionButtonSize.Y * UIConstants.BetPanelHeightToActionButtonHeightRatio;
+
+        float sideInset = Math.Max(12f, viewportWidth * UIConstants.BetPanelRightInsetRatio);
+        float bottomInset = Math.Max(12f, viewportHeight * UIConstants.BetPanelBottomInsetRatio);
+        float safeGap = Math.Max(10f, viewportWidth * UIConstants.BetPanelSafeGapToTableRatio);
+
+        var rightCenter = new Vector2(
+            viewportWidth - sideInset - panelWidth / 2f,
+            Math.Clamp(
+                viewportHeight * UIConstants.BetPanelPreferredRightYRatio,
+                sideInset + panelHeight / 2f,
+                viewportHeight - sideInset - panelHeight / 2f));
+        var rightRect = CreateCenteredRect(rightCenter, panelWidth, panelHeight);
+
+        float gameplayRightInRightRail = rightRect.Left - safeGap;
+        bool useRightRail = gameplayRightInRightRail >= viewportWidth * UIConstants.BetPanelMinGameplayWidthRatio
+            && viewportHeight >= UIConstants.BetPanelRightRailMinViewportHeight;
+
+        BetPanelLayout betPanel;
+        Rectangle gameplayBounds;
+        if (useRightRail)
+        {
+            betPanel = new BetPanelLayout(BetPanelPlacementMode.RightRail, rightRect, rightCenter, panelWidth, panelHeight);
+            gameplayBounds = new Rectangle(
+                viewportBounds.Left,
+                viewportBounds.Top,
+                Math.Max(1, (int)MathF.Floor(gameplayRightInRightRail)),
+                viewportBounds.Height);
+        }
+        else
+        {
+            var bottomCenter = new Vector2(
+                viewportWidth / 2f,
+                viewportHeight - bottomInset - panelHeight / 2f);
+            var bottomRect = CreateCenteredRect(bottomCenter, panelWidth, panelHeight);
+            betPanel = new BetPanelLayout(BetPanelPlacementMode.BottomCenter, bottomRect, bottomCenter, panelWidth, panelHeight);
+
+            gameplayBounds = new Rectangle(
+                viewportBounds.Left,
+                viewportBounds.Top,
+                viewportBounds.Width,
+                Math.Max(1, bottomRect.Top - (int)MathF.Ceiling(safeGap)));
+        }
+
+        var table = CalculateTableSurfaceLayout(
+            viewportBounds,
+            gameplayBounds,
+            betPanel.PanelRect,
+            useRightRail);
+
+        return new GameSurfaceLayout(viewportBounds, gameplayBounds, betPanel, table);
+    }
 
     public static Vector2 CalculateCardSize(int viewportHeight)
     {
@@ -348,5 +457,82 @@ public static class GameLayoutCalculator
     private static float GetTwoHandGapFloor(IReadOnlyList<int> handCardCounts, Vector2 cardSize)
     {
         return handCardCounts.Count == 2 ? cardSize.X * TwoHandMinGapCardRatio : 0f;
+    }
+
+    private static TableSurfaceLayout CalculateTableSurfaceLayout(
+        Rectangle viewportBounds,
+        Rectangle gameplayBounds,
+        Rectangle reservedUiBounds,
+        bool hasRightRail)
+    {
+        float topAnchor = MathHelper.ToRadians(270f);
+        float halfSweep = MathHelper.ToRadians(UIConstants.TableArcHalfSweepDegrees);
+        float edgeCos = MathF.Abs(MathF.Cos(topAnchor + halfSweep));
+
+        var cardSize = CalculateCardSize(viewportBounds.Height);
+        float dealerBottom = CalculateDealerCardsY(viewportBounds.Height) + cardSize.Y;
+        float playerTop = CalculatePlayerCardsY(viewportBounds.Height);
+        float topGap = Math.Clamp(
+            viewportBounds.Height * UIConstants.TableTopGapRatio,
+            UIConstants.TableMinTopGap,
+            UIConstants.TableMaxTopGap);
+        float bottomGap = Math.Clamp(
+            viewportBounds.Height * UIConstants.TableBottomGapRatio,
+            UIConstants.TableMinBottomGap,
+            UIConstants.TableMaxBottomGap);
+
+        float topTarget = dealerBottom + topGap;
+        float bottomLimit = playerTop - bottomGap;
+        float verticalDenominator = Math.Max(0.15f, 1f - MathF.Cos(halfSweep));
+        float radiusByVertical = Math.Max(18f, (bottomLimit - topTarget) / verticalDenominator);
+        float maxRadius = MathF.Min(viewportBounds.Width, viewportBounds.Height) * UIConstants.TableMaxOuterRadiusRatio;
+        float preferredRadius = MathF.Min(viewportBounds.Width, viewportBounds.Height) * 0.31f;
+        float radius = Math.Min(Math.Min(preferredRadius, maxRadius), radiusByVertical);
+
+        float sideInset = Math.Max(8f, viewportBounds.Width * UIConstants.TableSideInsetRatio);
+        float leftBoundary = Math.Max(gameplayBounds.Left + sideInset, viewportBounds.Left + sideInset);
+        float rightBoundary = Math.Min(gameplayBounds.Right - sideInset, viewportBounds.Right - sideInset);
+
+        if (hasRightRail && reservedUiBounds.Width > 0)
+            rightBoundary = Math.Min(rightBoundary, reservedUiBounds.Left - sideInset);
+
+        if (edgeCos < 0.1f)
+            edgeCos = 0.1f;
+
+        float centerX = viewportBounds.Width / 2f;
+        float maxByLeft = (centerX - leftBoundary) / edgeCos;
+        float maxByRight = (rightBoundary - centerX) / edgeCos;
+        float maxByHorizontal = Math.Max(0f, Math.Min(maxByLeft, maxByRight));
+        radius = Math.Min(radius, maxByHorizontal);
+
+        if (radius < 24f)
+            radius = 24f;
+
+        float centerY = topTarget + radius;
+        float outerRadius = radius;
+        float middleRadius = outerRadius * UIConstants.TableMiddleRadiusRatio;
+        float innerRadius = outerRadius * UIConstants.TableInnerRadiusRatio;
+
+        return new TableSurfaceLayout(
+            viewportBounds,
+            gameplayBounds,
+            reservedUiBounds,
+            new Vector2(centerX, centerY),
+            outerRadius,
+            middleRadius,
+            innerRadius,
+            topAnchor,
+            halfSweep,
+            dealerBottom,
+            playerTop);
+    }
+
+    private static Rectangle CreateCenteredRect(Vector2 center, float width, float height)
+    {
+        return new Rectangle(
+            (int)MathF.Round(center.X - width / 2f),
+            (int)MathF.Round(center.Y - height / 2f),
+            (int)MathF.Round(width),
+            (int)MathF.Round(height));
     }
 }
