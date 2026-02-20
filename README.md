@@ -26,3 +26,11 @@ Planned:
 ![menu](img/menu.png)
 ![game](img/game.png)
 ![stats](img/stats.png)
+
+## License
+
+This project is licensed under the MIT License.
+
+All source code and art assets in this repository are covered by the same
+license terms. If you redistribute any copy or substantial portion, keep the
+copyright notice and license text.
