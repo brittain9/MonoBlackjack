@@ -36,10 +36,18 @@ internal static class UIConstants
     public const float MaxActionButtonsVerticalGap = 14f;
     public const float ActionButtonsBottomInsetRatio = 0.75f;
 
-    public const float BetCenterYRatio = 0.5f;
+    // Table sizing: constrain to these fractions of the viewport so space remains for cards above/below.
+    public const float MaxTableWidthFraction = 0.90f;
+    public const float MaxTableHeightFraction = 0.55f;
+
+    // Dealer cards are positioned above the table in the top margin.
+    // This is the card CENTER as a fraction of viewport height.
+    public const float DealerCardsViewportCenterYRatio = 0.11f;
+
+    public const float BetCenterYRatio = 0.70f;
     public const float BetArrowWidthToActionButtonHeightRatio = 1.2f;
     public const float BetArrowSpacingToActionButtonWidthRatio = 0.8f;
-    public const float DealButtonOffsetRatio = 0.08f;
-    public const float RepeatBetButtonOffsetRatio = 0.14f;
+    public const float DealButtonOffsetRatio = 0.065f;
+    public const float RepeatBetButtonOffsetRatio = 0.09f;
     public const float BankruptButtonsYRatio = 0.55f;
 }

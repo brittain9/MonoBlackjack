@@ -1,7 +1,7 @@
 using Microsoft.Xna.Framework.Input;
 using MonoBlackjack.Core;
 
-namespace MonoBlackjack;
+namespace MonoBlackjack.Infrastructure.Input;
 
 internal enum InputAction
 {

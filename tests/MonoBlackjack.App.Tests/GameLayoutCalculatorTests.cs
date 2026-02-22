@@ -89,6 +89,34 @@ public class GameLayoutCalculatorTests
     }
 
     [Theory]
+    [InlineData(1280, 720)]
+    [InlineData(1920, 1080)]
+    [InlineData(3840, 2160)]
+    [InlineData(5120, 2160)]
+    public void CalculateTableLayout_CentersWithoutUpscaling(int viewportWidth, int viewportHeight)
+    {
+        var layout = GameLayoutCalculator.CalculateTableLayout(viewportWidth, viewportHeight);
+
+        Assert.True(layout.Scale <= 1f + 0.0001f);
+        Assert.InRange(layout.Left + layout.Width / 2f, viewportWidth / 2f - 0.001f, viewportWidth / 2f + 0.001f);
+        Assert.InRange(layout.Top + layout.Height / 2f, viewportHeight / 2f - 0.001f, viewportHeight / 2f + 0.001f);
+    }
+
+    [Theory]
+    [InlineData(800, 600)]
+    [InlineData(1280, 720)]
+    [InlineData(1920, 1080)]
+    public void DealerAndPlayerRows_TableAnchored_DoNotOverlapVertically(int viewportWidth, int viewportHeight)
+    {
+        var cardSize = GameLayoutCalculator.CalculateCardSize(viewportHeight);
+        var dealerY = GameLayoutCalculator.CalculateDealerCardsY(viewportWidth, viewportHeight, cardSize.Y);
+        var playerY = GameLayoutCalculator.CalculatePlayerCardsY(viewportWidth, viewportHeight, cardSize.Y);
+
+        var dealerBottom = dealerY + cardSize.Y;
+        Assert.True(playerY > dealerBottom, $"Expected table-anchored player row top ({playerY}) > dealer row bottom ({dealerBottom}) for viewport {viewportWidth}x{viewportHeight}");
+    }
+
+    [Theory]
     [InlineData(800, 600)]
     [InlineData(1280, 720)]
     [InlineData(1920, 1080)]

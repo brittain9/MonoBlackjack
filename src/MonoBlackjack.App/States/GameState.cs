@@ -7,11 +7,11 @@ using MonoBlackjack.Core;
 using MonoBlackjack.Core.Events;
 using MonoBlackjack.Core.Ports;
 using MonoBlackjack.Core.Players;
-using MonoBlackjack.DevTools;
-using MonoBlackjack.Events;
+using MonoBlackjack.Infrastructure.DevTools;
+using MonoBlackjack.Infrastructure.Events;
 using MonoBlackjack.Layout;
 using MonoBlackjack.Rendering;
-using MonoBlackjack.Stats;
+using MonoBlackjack.Services;
 
 namespace MonoBlackjack;
 
@@ -36,6 +36,7 @@ internal class GameState : State
     private readonly GamePauseController _pauseController;
     private readonly GameAnimationCoordinator _animationCoordinator;
     private readonly GameHudPresenter _hudPresenter;
+    private readonly GameTableRenderer _tableRenderer;
 
     private readonly Button _hitButton;
     private readonly Button _standButton;
@@ -106,6 +107,7 @@ internal class GameState : State
 
         var buttonTexture = _content.Load<Texture2D>("Controls/Button");
         _font = _content.Load<SpriteFont>("Fonts/MyFont");
+        var tableTexture = _content.Load<Texture2D>("Art/BlackjackTable");
 
         _inputController = new GameInputController();
         _pauseController = new GamePauseController(buttonTexture, _font);
@@ -124,6 +126,7 @@ internal class GameState : State
             GetResponsiveScale);
 
         _hudPresenter = new GameHudPresenter(_graphicsDevice, _font, _pixelTexture, GetResponsiveScale);
+        _tableRenderer = new GameTableRenderer(_graphicsDevice, tableTexture, _font, _rules, GetResponsiveScale);
 
         _hitButton = new Button(buttonTexture, _font) { Text = "Hit", PenColor = Color.Black };
         _standButton = new Button(buttonTexture, _font) { Text = "Stand", PenColor = Color.Black };
@@ -651,22 +654,32 @@ internal class GameState : State
         var vp = _graphicsDevice.Viewport;
         bool isBettingMode = _rules.BetFlow == BetFlowMode.Betting;
 
+        spriteBatch.Begin(
+            SpriteSortMode.Deferred,
+            BlendState.AlphaBlend,
+            SamplerState.LinearClamp,
+            DepthStencilState.None,
+            RasterizerState.CullCounterClockwise);
+        _tableRenderer.Draw(spriteBatch);
+        spriteBatch.End();
+
         if (_gamePhase == GamePhase.Betting)
         {
             spriteBatch.Begin();
             _hudPresenter.DrawHud(spriteBatch, _player.Bank, _gamePhase, _lastBet);
 
+            var betCenterY = vp.Height * UIConstants.BetCenterYRatio;
             var betText = $"${_pendingBet}";
             var betTextScale = GetResponsiveScale(1f);
             var betTextSize = _font.MeasureString(betText) * betTextScale;
-            var betTextPos = new Vector2(vp.Width / 2f - betTextSize.X / 2f, vp.Height * 0.5f - betTextSize.Y / 2f);
+            var betTextPos = new Vector2(vp.Width / 2f - betTextSize.X / 2f, betCenterY - betTextSize.Y / 2f);
             spriteBatch.DrawString(_font, betText, betTextPos, Color.Gold, 0f, Vector2.Zero, betTextScale, SpriteEffects.None, 0f);
 
             const string betLabel = "Place Your Bet";
             var betLabelScale = GetResponsiveScale(0.8f);
             var labelSize = _font.MeasureString(betLabel) * betLabelScale;
             var labelYOffset = Math.Max(vp.Height * 0.028f, 12f);
-            var labelPos = new Vector2(vp.Width / 2f - labelSize.X / 2f, vp.Height * 0.5f - betTextSize.Y - labelYOffset);
+            var labelPos = new Vector2(vp.Width / 2f - labelSize.X / 2f, betCenterY - betTextSize.Y - labelYOffset);
             spriteBatch.DrawString(_font, betLabel, labelPos, Color.White, 0f, Vector2.Zero, betLabelScale, SpriteEffects.None, 0f);
 
             _betDownButton.Draw(gameTime, spriteBatch);

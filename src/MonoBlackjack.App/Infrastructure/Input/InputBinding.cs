@@ -1,6 +1,6 @@
 using Microsoft.Xna.Framework.Input;
 
-namespace MonoBlackjack;
+namespace MonoBlackjack.Infrastructure.Input;
 
 internal readonly record struct InputBinding(Keys Key, bool RequiresShift = false)
 {

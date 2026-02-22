@@ -3,7 +3,7 @@ using Microsoft.Xna.Framework.Graphics;
 using MonoBlackjack.Core;
 using MonoBlackjack.Core.Players;
 
-namespace MonoBlackjack;
+namespace MonoBlackjack.Rendering.Game;
 
 internal sealed class GameHudPresenter
 {

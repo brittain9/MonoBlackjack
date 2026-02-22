@@ -9,6 +9,34 @@ namespace MonoBlackjack.Layout;
 public static class GameLayoutCalculator
 {
     public const float CardAspectRatio = UIConstants.CardAspectRatio;
+    public const float TableSourceWidth = 3840f;
+    public const float TableSourceHeight = 1388f;
+
+    // Arc geometry derived from pixel measurements of Content/Art/BlackjackTable.png (3840×1388 px).
+    // All three arcs share the same concentric center: X=1920 (image midpoint), Y=-1000 (off-screen above).
+    // Radii place each text band on the corresponding yellow line of the felt.
+    // Angles use standard MonoGame convention: 0°=right, 90°=down, 135°=down-left, 45°=down-right.
+    public static readonly ArcLayoutInfo PayoutArc = new(
+        CenterSource: new Vector2(1920f, -1000f),
+        RadiusSource: 1300f,
+        StartAngleDeg: 135f,
+        EndAngleDeg: 45f);
+
+    public static readonly ArcLayoutInfo DealerRuleArc = new(
+        CenterSource: new Vector2(1920f, -1000f),
+        RadiusSource: 1400f,
+        StartAngleDeg: 135f,
+        EndAngleDeg: 45f);
+
+    public static readonly ArcLayoutInfo InsuranceArc = new(
+        CenterSource: new Vector2(1920f, -1000f),
+        RadiusSource: 1625f,
+        StartAngleDeg: 135f,
+        EndAngleDeg: 45f);
+
+    public const float DealerCardsTopPaddingSource = 22f;
+    public const float PlayerCardsTopPaddingSource = 22f;
+
     public const float DealerCardsYRatio = 0.18f;
     public const float PlayerCardsYRatio = 0.52f;
     public const float SingleHandSpacingRatio = 1.08f;
@@ -40,9 +68,41 @@ public static class GameLayoutCalculator
         return viewportHeight * DealerCardsYRatio;
     }
 
+    public static float CalculateDealerCardsY(int viewportWidth, int viewportHeight, float cardHeight)
+    {
+        // Dealer cards sit in the top margin above the table.
+        // Center the card at DealerCardsViewportCenterYRatio of viewport height.
+        float centerY = viewportHeight * UIConstants.DealerCardsViewportCenterYRatio;
+        return Math.Max(0f, centerY - cardHeight / 2f);
+    }
+
     public static float CalculatePlayerCardsY(int viewportHeight)
     {
         return viewportHeight * PlayerCardsYRatio;
+    }
+
+    public static float CalculatePlayerCardsY(int viewportWidth, int viewportHeight, float cardHeight)
+    {
+        var tableLayout = CalculateTableLayout(viewportWidth, viewportHeight);
+        float insuranceArcY = tableLayout.Top + ((InsuranceArc.CenterSource.Y + InsuranceArc.RadiusSource) * tableLayout.Scale);
+        float topPadding = Math.Max(4f, PlayerCardsTopPaddingSource * tableLayout.Scale);
+        float y = insuranceArcY + topPadding;
+        float maxY = Math.Max(0f, viewportHeight - cardHeight);
+        return Math.Min(y, maxY);
+    }
+
+    public static TableLayoutInfo CalculateTableLayout(int viewportWidth, int viewportHeight)
+    {
+        float naturalScale = MathF.Min(viewportWidth / TableSourceWidth, viewportHeight / TableSourceHeight);
+        float maxScaleByWidth  = viewportWidth  * UIConstants.MaxTableWidthFraction  / TableSourceWidth;
+        float maxScaleByHeight = viewportHeight * UIConstants.MaxTableHeightFraction / TableSourceHeight;
+        float scale = MathF.Min(1f, MathF.Min(naturalScale, MathF.Min(maxScaleByWidth, maxScaleByHeight)));
+
+        float width = TableSourceWidth * scale;
+        float height = TableSourceHeight * scale;
+        float left = (viewportWidth - width) / 2f;
+        float top = (viewportHeight - height) / 2f;
+        return new TableLayoutInfo(left, top, width, height, scale);
     }
 
     public static float CalculateActionButtonPadding(int viewportWidth)
@@ -350,3 +410,16 @@ public static class GameLayoutCalculator
         return handCardCounts.Count == 2 ? cardSize.X * TwoHandMinGapCardRatio : 0f;
     }
 }
+
+public readonly record struct TableLayoutInfo(
+    float Left,
+    float Top,
+    float Width,
+    float Height,
+    float Scale);
+
+public readonly record struct ArcLayoutInfo(
+    Vector2 CenterSource,
+    float RadiusSource,
+    float StartAngleDeg,
+    float EndAngleDeg);

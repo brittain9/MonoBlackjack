@@ -25,6 +25,18 @@
 /processorParam:TextureFormat=Color
 /build:Art/menuLogo.png
 
+#begin Art/BlackjackTable.png
+/importer:TextureImporter
+/processor:TextureProcessor
+/processorParam:ColorKeyColor=255,0,255,255
+/processorParam:ColorKeyEnabled=True
+/processorParam:GenerateMipmaps=False
+/processorParam:PremultiplyAlpha=True
+/processorParam:ResizeToPowerOfTwo=False
+/processorParam:MakeSquare=False
+/processorParam:TextureFormat=Color
+/build:Art/BlackjackTable.png
+
 #begin Cards/10_of_clubs.png
 /importer:TextureImporter
 /processor:TextureProcessor

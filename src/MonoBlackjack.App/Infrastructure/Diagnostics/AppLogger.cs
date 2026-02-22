@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace MonoBlackjack.Diagnostics;
+namespace MonoBlackjack.Infrastructure.Diagnostics;
 
 internal static class AppLogger
 {

@@ -3,7 +3,7 @@ using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using MonoBlackjack.Core;
 
-namespace MonoBlackjack.DevTools;
+namespace MonoBlackjack.Infrastructure.DevTools;
 
 internal sealed class SplitSetupTool : IDevMenuTool
 {

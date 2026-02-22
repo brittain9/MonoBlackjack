@@ -1,6 +1,6 @@
 using Microsoft.Xna.Framework;
 
-namespace MonoBlackjack;
+namespace MonoBlackjack.Rendering.Stats;
 
 internal static class StatsStyle
 {

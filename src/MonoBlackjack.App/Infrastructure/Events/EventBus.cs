@@ -1,6 +1,6 @@
 using MonoBlackjack.Core.Events;
 
-namespace MonoBlackjack.Events;
+namespace MonoBlackjack.Infrastructure.Events;
 
 /// <summary>
 /// Queues domain events during game logic, flushes to typed handlers during Update().

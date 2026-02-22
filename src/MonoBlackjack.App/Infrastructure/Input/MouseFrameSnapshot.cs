@@ -1,7 +1,7 @@
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 
-namespace MonoBlackjack;
+namespace MonoBlackjack.Infrastructure.Input;
 
 public readonly struct MouseFrameSnapshot
 {

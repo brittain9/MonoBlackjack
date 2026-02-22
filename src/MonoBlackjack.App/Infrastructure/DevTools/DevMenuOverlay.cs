@@ -2,7 +2,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 
-namespace MonoBlackjack.DevTools;
+namespace MonoBlackjack.Infrastructure.DevTools;
 
 internal sealed class DevMenuOverlay
 {

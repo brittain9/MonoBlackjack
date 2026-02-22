@@ -2,7 +2,7 @@ using System.Globalization;
 using Microsoft.Xna.Framework;
 using MonoBlackjack.Core;
 
-namespace MonoBlackjack;
+namespace MonoBlackjack.Infrastructure.Settings;
 
 internal readonly record struct RuntimeGraphicsSettings(
     Color BackgroundColor,

@@ -1,4 +1,4 @@
-namespace MonoBlackjack;
+namespace MonoBlackjack.Rendering.Stats;
 
 internal enum StatsTab
 {

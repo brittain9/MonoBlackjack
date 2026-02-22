@@ -256,12 +256,14 @@ internal sealed class GameAnimationCoordinator
 
     public float GetDealerCardsY()
     {
-        return GameLayoutCalculator.CalculateDealerCardsY(_graphicsDevice.Viewport.Height);
+        var vp = _graphicsDevice.Viewport;
+        return GameLayoutCalculator.CalculateDealerCardsY(vp.Width, vp.Height, _cardSize.Y);
     }
 
     public float GetPlayerCardsY()
     {
-        return GameLayoutCalculator.CalculatePlayerCardsY(_graphicsDevice.Viewport.Height);
+        var vp = _graphicsDevice.Viewport;
+        return GameLayoutCalculator.CalculatePlayerCardsY(vp.Width, vp.Height, _cardSize.Y);
     }
 
     public Vector2 GetCardTargetPosition(string recipient, int handIndex, int cardIndexInHand)

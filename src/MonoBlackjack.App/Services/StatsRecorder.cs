@@ -2,10 +2,10 @@ using System.Globalization;
 using MonoBlackjack.Core;
 using MonoBlackjack.Core.Events;
 using MonoBlackjack.Core.Ports;
-using MonoBlackjack.Diagnostics;
-using MonoBlackjack.Events;
+using MonoBlackjack.Infrastructure.Diagnostics;
+using MonoBlackjack.Infrastructure.Events;
 
-namespace MonoBlackjack.Stats;
+namespace MonoBlackjack.Services;
 
 internal sealed class StatsRecorder : IDisposable
 {

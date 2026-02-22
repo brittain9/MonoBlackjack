@@ -2,7 +2,7 @@ using System;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
-namespace MonoBlackjack
+namespace MonoBlackjack.Rendering.Controls
 {
     /// <summary>
     /// UI button using the global center-anchor coordinate standard.

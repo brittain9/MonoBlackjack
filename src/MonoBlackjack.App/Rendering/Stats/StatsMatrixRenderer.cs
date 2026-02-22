@@ -3,7 +3,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using MonoBlackjack.Core.Ports;
 
-namespace MonoBlackjack;
+namespace MonoBlackjack.Rendering.Stats;
 
 internal sealed class StatsMatrixRenderer
 {
